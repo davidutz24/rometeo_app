@@ -1,0 +1,6 @@
+{
+  "name": "ROmeteo",
+  "description": "Aplicație meteorologică avansată ROmeteo cu prognoze multi-model (Google WeatherNext 3, ECMWF IFS & AIFS, ICON, ARPEGE, GFS), radar Doppler național ANM, 7 stații OpenData, satelit METEOSAT-10, avertizări oficiale ANM și produse climatologice. ©2026 ROmeteo. Creator: David Marica.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

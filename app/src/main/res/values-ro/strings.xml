@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">Meteo Models</string>
+    <string name="weather">Vremea</string>
+    <string name="models">Modele</string>
+    <string name="compare">Comparație</string>
+    <string name="search_city_hint">Caută oraș sau localitate…</string>
+    <string name="current_weather">Vremea curentă</string>
+    <string name="feels_like">Se simte ca</string>
+    <string name="hourly_forecast">Prognoză pe ore</string>
+    <string name="daily_forecast">Prognoză pe 7 zile</string>
+    <string name="model_comparison">Comparație Multi-Model</string>
+    <string name="model_consensus">Consens Modele</string>
+    <string name="humidity">Umiditate</string>
+    <string name="wind">Vânt</string>
+    <string name="pressure">Presiune</string>
+    <string name="precipitation">Precipitații</string>
+    <string name="offline_cached">Date salvate offline</string>
+    <string name="live_data">Model în direct</string>
+    <string name="updated_ago">Actualizat %s</string>
+    <string name="refresh">Reîmprospătare</string>
+    <string name="saved_locations">Locații salvate</string>
+    <string name="add_location">Adaugă locație</string>
+    <string name="settings">Setări</string>
+    <string name="language">Limbă</string>
+    <string name="theme">Temă</string>
+    <string name="light_mode">Luminos</string>
+    <string name="dark_mode">Întunecat</string>
+    <string name="system_mode">Sistem</string>
+</resources>

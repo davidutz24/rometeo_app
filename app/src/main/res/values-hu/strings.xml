@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">Meteo Models</string>
+    <string name="weather">Időjárás</string>
+    <string name="models">Modellek</string>
+    <string name="compare">Összehasonlítás</string>
+    <string name="search_city_hint">Város vagy hely keresése…</string>
+    <string name="current_weather">Jelenlegi időjárás</string>
+    <string name="feels_like">Hőérzet</string>
+    <string name="hourly_forecast">Óránkénti előrejelzés</string>
+    <string name="daily_forecast">7 napos előrejelzés</string>
+    <string name="model_comparison">Többmodell-összehasonlítás</string>
+    <string name="model_consensus">Modellkonszenzus</string>
+    <string name="humidity">Páratartalom</string>
+    <string name="wind">Szél</string>
+    <string name="pressure">Légnyomás</string>
+    <string name="precipitation">Csapadék</string>
+    <string name="offline_cached">Offline gyorsítótár</string>
+    <string name="live_data">Élő modell</string>
+    <string name="updated_ago">Frissítve: %s</string>
+    <string name="refresh">Frissítés</string>
+    <string name="saved_locations">Mentett helyek</string>
+    <string name="add_location">Hely hozzáadása</string>
+    <string name="settings">Beállítások</string>
+    <string name="language">Nyelv</string>
+    <string name="theme">Téma</string>
+    <string name="light_mode">Világos</string>
+    <string name="dark_mode">Sötét</string>
+    <string name="system_mode">Rendszer</string>
+</resources>
