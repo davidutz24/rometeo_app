@@ -1,13 +1,16 @@
 package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +18,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -22,7 +27,7 @@ import androidx.compose.material.icons.rounded.Air
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.Navigation
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.ButtonDefaults
@@ -41,7 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -51,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import com.example.model.AppLanguage
 import com.example.model.DailyPoint
 import com.example.model.ForecastCategory
+import com.example.model.HourlyPoint
 import com.example.model.Translations
 import com.example.model.WeatherModel
 import java.util.Locale
@@ -59,14 +64,13 @@ import java.util.Locale
 fun DailyForecastList(
     daily: List<DailyPoint>,
     extendedDaily: List<DailyPoint> = emptyList(),
+    hourly: List<HourlyPoint> = emptyList(),
     model: WeatherModel,
-    category: ForecastCategory = ForecastCategory.SHORT_TERM,
+    category: ForecastCategory = ForecastCategory.FORECAST,
     lang: AppLanguage,
     modifier: Modifier = Modifier
 ) {
-    val displayList = if (model.isLongRange && extendedDaily.isNotEmpty()) {
-        extendedDaily
-    } else if (model == WeatherModel.WEATHERNEXT_3_MEDIUM && extendedDaily.isNotEmpty()) {
+    val displayList = if (extendedDaily.isNotEmpty()) {
         extendedDaily
     } else {
         daily
@@ -74,10 +78,9 @@ fun DailyForecastList(
 
     if (displayList.isEmpty()) return
 
-    // In Medium and Long-term standalone list mode, start expanded or show list items cleanly
-    val isStandaloneListMode = category == ForecastCategory.MEDIUM_TERM || category == ForecastCategory.LONG_TERM
+    val isLongTerm = category == ForecastCategory.LONG_TERM || model.isLongRange
     var isExpanded by remember(category, model) {
-        mutableStateOf(if (model.isLongRange) false else true)
+        mutableStateOf(true)
     }
 
     val allMins = displayList.map { it.minTemperature }
@@ -87,10 +90,46 @@ fun DailyForecastList(
     val weekRange = (weekMax - weekMin).coerceAtLeast(1.0)
 
     val titleText = when {
-        category == ForecastCategory.LONG_TERM -> Translations.get("long_term_forecast_title", lang)
-        category == ForecastCategory.MEDIUM_TERM -> Translations.get("category_medium_term", lang)
-        model.isRapidUpdate -> "ICON-EU Flash (30-Hour Horizon)"
-        else -> Translations.get("daily_forecast", lang)
+        isLongTerm -> when (model) {
+            WeatherModel.ECMWF_AIFS -> when (lang) {
+                AppLanguage.ROMANIAN -> "Prognoză AI Sinoptic AIFS (${displayList.size} Zile)"
+                AppLanguage.ENGLISH -> "AIFS AI Synoptic Forecast (${displayList.size} Days)"
+                AppLanguage.HUNGARIAN -> "AIFS AI szinoptikus előrejelzés (${displayList.size} nap)"
+            }
+            WeatherModel.ECMWF_EXTENDED -> when (lang) {
+                AppLanguage.ROMANIAN -> "Tendință Sub-Sezonieră ECMWF ENS (${displayList.size} Zile)"
+                AppLanguage.ENGLISH -> "ECMWF ENS Sub-Seasonal Trend (${displayList.size} Days)"
+                AppLanguage.HUNGARIAN -> "ECMWF ENS szub-szezonális trend (${displayList.size} nap)"
+            }
+            WeatherModel.GEFS -> when (lang) {
+                AppLanguage.ROMANIAN -> "Ansamblu Global GEFS (${displayList.size} Zile)"
+                AppLanguage.ENGLISH -> "GEFS Global Ensemble (${displayList.size} Days)"
+                AppLanguage.HUNGARIAN -> "GEFS globális együttes (${displayList.size} nap)"
+            }
+            WeatherModel.SEAS5 -> when (lang) {
+                AppLanguage.ROMANIAN -> "Tendință Sezonieră ECMWF SEAS5 (${displayList.size} Zile)"
+                AppLanguage.ENGLISH -> "ECMWF SEAS5 Seasonal Trend (${displayList.size} Days)"
+                AppLanguage.HUNGARIAN -> "ECMWF SEAS5 szezonális trend (${displayList.size} nap)"
+            }
+            WeatherModel.CFSV2 -> when (lang) {
+                AppLanguage.ROMANIAN -> "Prognoză Climatică NOAA CFSv2 (${displayList.size} Zile)"
+                AppLanguage.ENGLISH -> "NOAA CFSv2 Climate Forecast (${displayList.size} Days)"
+                AppLanguage.HUNGARIAN -> "NOAA CFSv2 éghajlati előrejelzés (${displayList.size} nap)"
+            }
+            else -> when (lang) {
+                AppLanguage.ROMANIAN -> "${model.shortName} (${displayList.size} Zile)"
+                AppLanguage.ENGLISH -> "${model.shortName} (${displayList.size} Days)"
+                AppLanguage.HUNGARIAN -> "${model.shortName} (${displayList.size} nap)"
+            }
+        }
+        else -> {
+            val daysCount = displayList.size
+            when (lang) {
+                AppLanguage.ROMANIAN -> "Prognoză $daysCount zile (${model.shortName})"
+                AppLanguage.ENGLISH -> "$daysCount-Day Forecast (${model.shortName})"
+                AppLanguage.HUNGARIAN -> "$daysCount napos előrejelzés (${model.shortName})"
+            }
+        }
     }
 
     Column(
@@ -112,7 +151,7 @@ fun DailyForecastList(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (category == ForecastCategory.LONG_TERM) {
+                if (isLongTerm) {
                     Icon(
                         imageVector = Icons.Rounded.CalendarMonth,
                         contentDescription = null,
@@ -134,8 +173,13 @@ fun DailyForecastList(
                 color = model.accentColor.copy(alpha = 0.2f),
                 border = androidx.compose.foundation.BorderStroke(1.dp, model.accentColor.copy(alpha = 0.4f))
             ) {
+                val daysUnit = when (lang) {
+                    AppLanguage.ROMANIAN -> "zile"
+                    AppLanguage.ENGLISH -> "Days"
+                    AppLanguage.HUNGARIAN -> "nap"
+                }
                 Text(
-                    text = "${displayList.size} Days (${model.shortName})",
+                    text = "${displayList.size} $daysUnit (${model.shortName})",
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -145,7 +189,7 @@ fun DailyForecastList(
             }
         }
 
-        val itemsToShow = if (model.isLongRange && !isExpanded) {
+        val itemsToShow = if (isLongTerm && !isExpanded) {
             displayList.take(7)
         } else {
             displayList
@@ -153,17 +197,26 @@ fun DailyForecastList(
 
         // Days list mode
         itemsToShow.forEachIndexed { index, day ->
+            val dayHourly = remember(day.dateIso, hourly, isLongTerm) {
+                if (isLongTerm) {
+                    emptyList()
+                } else {
+                    hourly.filter { it.timeIso.startsWith(day.dateIso) }
+                }
+            }
+
             DetailedDailyCard(
                 day = day,
                 weekMin = weekMin,
                 weekRange = weekRange,
                 accentColor = model.accentColor,
-                isDetailed = isStandaloneListMode,
+                isLongTerm = isLongTerm,
+                dayHourly = dayHourly,
                 lang = lang
             )
         }
 
-        if (model.isLongRange && displayList.size > 7) {
+        if (isLongTerm && displayList.size > 7) {
             TextButton(
                 onClick = { isExpanded = !isExpanded },
                 modifier = Modifier
@@ -179,9 +232,17 @@ fun DailyForecastList(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = if (isExpanded) {
-                        "Show Less (7 Days)"
+                        when (lang) {
+                            AppLanguage.ROMANIAN -> "Afișează mai puțin (7 zile)"
+                            AppLanguage.ENGLISH -> "Show Less (7 Days)"
+                            AppLanguage.HUNGARIAN -> "Kevesebb mutatása (7 nap)"
+                        }
                     } else {
-                        "Show Full 46-Day ECMWF Ensemble (${displayList.size} Days)"
+                        when (lang) {
+                            AppLanguage.ROMANIAN -> "Afișează tot orizontul (${displayList.size} zile)"
+                            AppLanguage.ENGLISH -> "Show Full Horizon (${displayList.size} Days)"
+                            AppLanguage.HUNGARIAN -> "Teljes időtáv (${displayList.size} nap)"
+                        }
                     },
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
                 )
@@ -196,7 +257,8 @@ fun DetailedDailyCard(
     weekMin: Double,
     weekRange: Double,
     accentColor: Color,
-    isDetailed: Boolean,
+    isLongTerm: Boolean,
+    dayHourly: List<HourlyPoint>,
     lang: AppLanguage,
     modifier: Modifier = Modifier
 ) {
@@ -286,7 +348,7 @@ fun DetailedDailyCard(
                     }
                 }
 
-                // Temperature Range
+                // Temperature Range + Expand Indicator
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -302,7 +364,7 @@ fun DetailedDailyCard(
                     // Compact mini temperature gradient indicator
                     Box(
                         modifier = Modifier
-                            .width(48.dp)
+                            .width(42.dp)
                             .height(6.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
@@ -331,49 +393,227 @@ fun DetailedDailyCard(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     )
+
+                    Icon(
+                        imageVector = if (isItemExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
 
-            // Always show meteorological info chips in standalone list mode, or when expanded in short-term
-            if (isDetailed || isItemExpanded) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                    modifier = Modifier.fillMaxWidth()
+            // Expanded content when day is clicked
+            AnimatedVisibility(
+                visible = isItemExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    // 1. Meteorological metrics chips: Vânt, Presiune, Precipitații
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        // Max Wind
-                        DayMetricChip(
-                            icon = Icons.Rounded.Air,
-                            label = Translations.get("wind", lang),
-                            value = String.format(Locale.getDefault(), "%.1f km/h", day.maxWindSpeed),
-                            tint = Color(0xFF10B981)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Max Wind
+                            DayMetricChip(
+                                icon = Icons.Rounded.Air,
+                                label = Translations.get("wind", lang),
+                                value = String.format(Locale.getDefault(), "%.1f km/h", day.maxWindSpeed),
+                                tint = Color(0xFF10B981)
+                            )
 
-                        // Mean Pressure
-                        DayMetricChip(
-                            icon = Icons.Rounded.Speed,
-                            label = Translations.get("pressure", lang),
-                            value = String.format(Locale.getDefault(), "%.0f hPa", day.surfacePressure),
-                            tint = Color(0xFF8B5CF6)
-                        )
+                            // Mean Pressure
+                            DayMetricChip(
+                                icon = Icons.Rounded.Speed,
+                                label = Translations.get("pressure", lang),
+                                value = String.format(Locale.getDefault(), "%.0f hPa", day.surfacePressure),
+                                tint = Color(0xFF8B5CF6)
+                            )
 
-                        // Precipitation accumulation
-                        DayMetricChip(
-                            icon = Icons.Rounded.WaterDrop,
-                            label = Translations.get("precipitation", lang),
-                            value = String.format(Locale.getDefault(), "%.1f mm", day.precipitationSum),
-                            tint = Color(0xFF0284C7)
-                        )
+                            // Precipitation accumulation
+                            DayMetricChip(
+                                icon = Icons.Rounded.WaterDrop,
+                                label = Translations.get("precipitation", lang),
+                                value = String.format(Locale.getDefault(), "%.1f mm", day.precipitationSum),
+                                tint = Color(0xFF0284C7)
+                            )
+                        }
+                    }
+
+                    // 2. Prognoza pe ore (doar la Prognoză / Termen Scurt & Mediu, NU la Termen Lung)
+                    if (!isLongTerm && dayHourly.isNotEmpty()) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Schedule,
+                                        contentDescription = null,
+                                        tint = accentColor,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = Translations.get("hourly_breakdown_title", lang),
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    )
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = accentColor.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "${dayHourly.size} ore",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            color = accentColor,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp
+                                        ),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            // Horizontal scroll of hourly details for this specific day
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(dayHourly, key = { it.timeIso }) { hourPoint ->
+                                    DayHourlyItemCard(
+                                        hourly = hourPoint,
+                                        accentColor = accentColor
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DayHourlyItemCard(
+    hourly: HourlyPoint,
+    accentColor: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+        ),
+        modifier = Modifier.width(72.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = hourly.displayHour,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp
+                )
+            )
+
+            WeatherIcon(
+                condition = hourly.weatherCondition,
+                size = 24.dp,
+                animate = false
+            )
+
+            Text(
+                text = String.format(Locale.getDefault(), "%.0f°", hourly.temperature),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            )
+
+            // Precipitații
+            if (hourly.precipitation > 0.0) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.WaterDrop,
+                        contentDescription = null,
+                        tint = Color(0xFF38BDF8),
+                        modifier = Modifier.size(9.dp)
+                    )
+                    Text(
+                        text = String.format(Locale.getDefault(), "%.1f", hourly.precipitation),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF38BDF8)
+                        )
+                    )
+                }
+            } else {
+                Text(
+                    text = "-",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    )
+                )
+            }
+
+            // Vânt
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Air,
+                    contentDescription = null,
+                    tint = Color(0xFF10B981),
+                    modifier = Modifier.size(9.dp)
+                )
+                Text(
+                    text = String.format(Locale.getDefault(), "%.0f", hourly.windSpeed),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 9.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
             }
         }
     }

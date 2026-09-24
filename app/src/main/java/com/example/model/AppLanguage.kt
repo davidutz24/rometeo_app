@@ -12,20 +12,35 @@ object Translations {
     }
 
     private val strings: Map<String, Map<AppLanguage, String>> = mapOf(
+        "category_forecast" to mapOf(
+            AppLanguage.ENGLISH to "Forecast",
+            AppLanguage.ROMANIAN to "Prognoză",
+            AppLanguage.HUNGARIAN to "Előrejelzés"
+        ),
+        "category_forecast_subtitle" to mapOf(
+            AppLanguage.ENGLISH to "0 – 15 Days (Short & Medium-Range Models)",
+            AppLanguage.ROMANIAN to "0 – 15 Zile (Modele Termen Scurt & Mediu)",
+            AppLanguage.HUNGARIAN to "0 – 15 nap (Rövid és középtávú modellek)"
+        ),
         "category_short_term" to mapOf(
-            AppLanguage.ENGLISH to "Short-Term Forecast",
-            AppLanguage.ROMANIAN to "Prognoză Termen Scurt",
-            AppLanguage.HUNGARIAN to "Rövid távú előrejelzés"
+            AppLanguage.ENGLISH to "Forecast",
+            AppLanguage.ROMANIAN to "Prognoză",
+            AppLanguage.HUNGARIAN to "Előrejelzés"
         ),
         "category_medium_term" to mapOf(
-            AppLanguage.ENGLISH to "Medium-Term Forecast",
-            AppLanguage.ROMANIAN to "Prognoză Termen Mediu",
-            AppLanguage.HUNGARIAN to "Középtávú előrejelzés"
+            AppLanguage.ENGLISH to "Medium-Term",
+            AppLanguage.ROMANIAN to "Termen Mediu",
+            AppLanguage.HUNGARIAN to "Középtáv"
         ),
         "category_long_term" to mapOf(
-            AppLanguage.ENGLISH to "Long-Term Forecast",
-            AppLanguage.ROMANIAN to "Prognoză Termen Lung",
-            AppLanguage.HUNGARIAN to "Hosszú távú előrejelzés"
+            AppLanguage.ENGLISH to "Long-Term",
+            AppLanguage.ROMANIAN to "Termen Lung",
+            AppLanguage.HUNGARIAN to "Hosszú táv"
+        ),
+        "hourly_breakdown_title" to mapOf(
+            AppLanguage.ENGLISH to "Hourly Evolution",
+            AppLanguage.ROMANIAN to "Evoluție pe ore",
+            AppLanguage.HUNGARIAN to "Óránkénti evolúció"
         ),
         "category_short_subtitle" to mapOf(
             AppLanguage.ENGLISH to "0 – 72 Hours (High-Frequency & Rapid Update)",
@@ -127,6 +142,11 @@ object Translations {
             AppLanguage.ROMANIAN to "Model în direct",
             AppLanguage.HUNGARIAN to "Élő modell"
         ),
+        "now" to mapOf(
+            AppLanguage.ENGLISH to "Now",
+            AppLanguage.ROMANIAN to "Acum",
+            AppLanguage.HUNGARIAN to "Most"
+        ),
         "updated" to mapOf(
             AppLanguage.ENGLISH to "Updated",
             AppLanguage.ROMANIAN to "Actualizat",
@@ -156,6 +176,26 @@ object Translations {
             AppLanguage.ENGLISH to "Saved Cities",
             AppLanguage.ROMANIAN to "Orașe salvate",
             AppLanguage.HUNGARIAN to "Mentett városok"
+        ),
+        "use_gps_location" to mapOf(
+            AppLanguage.ENGLISH to "Use GPS / Current Location",
+            AppLanguage.ROMANIAN to "Locația curentă (GPS)",
+            AppLanguage.HUNGARIAN to "Jelenlegi helyzet (GPS)"
+        ),
+        "gps_locating" to mapOf(
+            AppLanguage.ENGLISH to "Locating via GPS…",
+            AppLanguage.ROMANIAN to "Se localizează prin GPS…",
+            AppLanguage.HUNGARIAN to "Helymeghatározás GPS-szel…"
+        ),
+        "gps_permission_denied" to mapOf(
+            AppLanguage.ENGLISH to "Location permission denied",
+            AppLanguage.ROMANIAN to "Permisiunea de localizare a fost refuzată",
+            AppLanguage.HUNGARIAN to "Helymeghatározási engedély megtagadva"
+        ),
+        "gps_error" to mapOf(
+            AppLanguage.ENGLISH to "Could not detect GPS location",
+            AppLanguage.ROMANIAN to "Nu s-a putut detecta locația GPS",
+            AppLanguage.HUNGARIAN to "Nem sikerült a GPS helyzet lekérése"
         ),
         "add_favorite" to mapOf(
             AppLanguage.ENGLISH to "Save to favorites",

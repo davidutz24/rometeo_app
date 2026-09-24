@@ -41,6 +41,7 @@ class GreetingScreenshotTest {
       }
     }
 
+    composeTestRule.waitForIdle()
     composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/greeting.png")
   }
 }

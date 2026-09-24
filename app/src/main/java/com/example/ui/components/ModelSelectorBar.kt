@@ -114,8 +114,7 @@ private fun ForecastCategoryBar(
                     modifier = Modifier.tabIndicatorOffset(tabPositions[selectedIndex]),
                     height = 3.dp,
                     color = when (selectedCategory) {
-                        ForecastCategory.SHORT_TERM -> Color(0xFF10B981)
-                        ForecastCategory.MEDIUM_TERM -> Color(0xFF38BDF8)
+                        ForecastCategory.FORECAST -> Color(0xFF0284C7)
                         ForecastCategory.LONG_TERM -> Color(0xFF8B5CF6)
                     }
                 )
@@ -128,8 +127,7 @@ private fun ForecastCategoryBar(
         categories.forEachIndexed { index, category ->
             val isSelected = category == selectedCategory
             val (icon, title) = when (category) {
-                ForecastCategory.SHORT_TERM -> Pair(Icons.Rounded.Schedule, Translations.get("category_short_term", lang))
-                ForecastCategory.MEDIUM_TERM -> Pair(Icons.Rounded.Timeline, Translations.get("category_medium_term", lang))
+                ForecastCategory.FORECAST -> Pair(Icons.Rounded.Timeline, Translations.get("category_forecast", lang))
                 ForecastCategory.LONG_TERM -> Pair(Icons.Rounded.CalendarMonth, Translations.get("category_long_term", lang))
             }
 
@@ -148,8 +146,7 @@ private fun ForecastCategoryBar(
                             contentDescription = null,
                             tint = if (isSelected) {
                                 when (category) {
-                                    ForecastCategory.SHORT_TERM -> Color(0xFF10B981)
-                                    ForecastCategory.MEDIUM_TERM -> Color(0xFF38BDF8)
+                                    ForecastCategory.FORECAST -> Color(0xFF0284C7)
                                     ForecastCategory.LONG_TERM -> Color(0xFF8B5CF6)
                                 }
                             } else {
@@ -252,7 +249,7 @@ private fun ModelChip(
                 color = if (isSelected) model.accentColor.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
             ) {
                 Text(
-                    text = model.resolution.split(" ").first(),
+                    text = model.badgeText,
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -277,30 +274,42 @@ private fun ActiveModelQuickInfo(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(
+        Column(
             modifier = Modifier.weight(1f, fill = false),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = model.agency,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            )
-            Text(
-                text = "•",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            )
-            Text(
-                text = model.architectureType,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                text = model.subtitleTagline,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
                 ),
                 maxLines = 1
             )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = model.agency,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+                Text(
+                    text = "•",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+                Text(
+                    text = model.architectureType,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    ),
+                    maxLines = 1
+                )
+            }
         }
 
         IconButton(

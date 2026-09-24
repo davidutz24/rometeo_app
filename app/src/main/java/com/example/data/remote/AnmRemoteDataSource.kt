@@ -322,6 +322,8 @@ object AnmRemoteDataSource {
                 county = "Bihor",
                 locationName = "Dealul Vântului",
                 coordinates = "47.078° N, 21.933° E",
+                latitude = 47.078,
+                longitude = 21.933,
                 elevationMeters = 205,
                 radarModel = "C-Band Polarimetric Doppler",
                 band = "C-Band (5.6 GHz)",
@@ -345,6 +347,8 @@ object AnmRemoteDataSource {
                 county = "Mureș",
                 locationName = "Bobohalma (Târnăveni)",
                 coordinates = "46.367° N, 24.233° E",
+                latitude = 46.367,
+                longitude = 24.233,
                 elevationMeters = 510,
                 radarModel = "S-Band Dual-Pol Doppler (WSR-98D)",
                 band = "S-Band (2.8 GHz)",
@@ -368,6 +372,8 @@ object AnmRemoteDataSource {
                 county = "București / Ilfov",
                 locationName = "Aeroport Băneasa",
                 coordinates = "44.502° N, 26.079° E",
+                latitude = 44.502,
+                longitude = 26.079,
                 elevationMeters = 90,
                 radarModel = "C-Band Polarimetric Doppler",
                 band = "C-Band (5.6 GHz)",
@@ -391,6 +397,8 @@ object AnmRemoteDataSource {
                 county = "Dolj",
                 locationName = "Cârcea",
                 coordinates = "44.275° N, 23.900° E",
+                latitude = 44.275,
+                longitude = 23.900,
                 elevationMeters = 190,
                 radarModel = "S-Band Dual-Pol Doppler (WSR-98D)",
                 band = "S-Band (2.8 GHz)",
@@ -414,6 +422,8 @@ object AnmRemoteDataSource {
                 county = "Sibiu",
                 locationName = "Dealul Cetății",
                 coordinates = "46.160° N, 24.350° E",
+                latitude = 46.160,
+                longitude = 24.350,
                 elevationMeters = 435,
                 radarModel = "C-Band Polarimetric Doppler",
                 band = "C-Band (5.6 GHz)",
@@ -437,6 +447,8 @@ object AnmRemoteDataSource {
                 county = "Vaslui",
                 locationName = "Grivița",
                 coordinates = "46.220° N, 27.650° E",
+                latitude = 46.220,
+                longitude = 27.650,
                 elevationMeters = 230,
                 radarModel = "S-Band Dual-Pol Doppler (WSR-98D)",
                 band = "S-Band (2.8 GHz)",
@@ -460,6 +472,8 @@ object AnmRemoteDataSource {
                 county = "Timiș",
                 locationName = "Urseni",
                 coordinates = "45.698° N, 21.285° E",
+                latitude = 45.698,
+                longitude = 21.285,
                 elevationMeters = 95,
                 radarModel = "S-Band Dual-Pol Doppler (WSR-98D)",
                 band = "S-Band (2.8 GHz)",
@@ -483,6 +497,8 @@ object AnmRemoteDataSource {
                 county = "România",
                 locationName = "Server Central ANM",
                 coordinates = "45.943° N, 24.966° E",
+                latitude = 45.943,
+                longitude = 24.966,
                 elevationMeters = 0,
                 radarModel = "Rețea Integrată Națională",
                 band = "Composite Multi-Frecvență",
@@ -512,9 +528,9 @@ object AnmRemoteDataSource {
             if (!response.isSuccessful) return@withContext emptyList()
             val html = response.body?.string() ?: return@withContext emptyList()
 
-            // Match lines like: <a href="ORA_2026092209150200dBZ.hdf">...</a> 22-Sep-2026 12:16 910K
+            // Match any HDF5 / OPERA file in the directory
             val pattern = Pattern.compile(
-                "<a href=\"(${stationCode}_(\\d{8})(\\d{4})\\d{4}([A-Za-z]+)\\.hdf)\">.*?</a>\\s+(\\d{2}-[A-Za-z]+-\\d{4}\\s+\\d{2}:\\d{2})\\s+([0-9A-Za-z]+)",
+                "<a\\s+href=\"([^\"]+\\.(?:hdf|h5|nc))\">.*?</a>\\s*(\\d{2}-[A-Za-z]{3}-\\d{4}\\s+\\d{2}:\\d{2})?\\s*([0-9.]+[A-Za-z]*)?",
                 Pattern.CASE_INSENSITIVE
             )
             val matcher = pattern.matcher(html)
@@ -522,22 +538,44 @@ object AnmRemoteDataSource {
 
             while (matcher.find()) {
                 val filename = matcher.group(1) ?: continue
-                val dateStr = matcher.group(2) ?: ""
-                val timeStr = matcher.group(3) ?: ""
-                val product = matcher.group(4) ?: "Radar"
-                val serverDate = matcher.group(5) ?: ""
-                val size = matcher.group(6) ?: ""
+                if (filename.startsWith("..") || filename.startsWith("/")) continue
 
-                val formattedTime = if (timeStr.length == 4) {
-                    "${timeStr.substring(0, 2)}:${timeStr.substring(2, 4)} UTC"
-                } else timeStr
+                val serverDate = matcher.group(2) ?: ""
+                val size = matcher.group(3) ?: ""
+
+                // Extract product from filename (e.g. dBZ, dBR, Height, V, RhoHV, ZDR, KDP)
+                val product = when {
+                    filename.contains("dBZ", ignoreCase = true) -> "dBZ (Reflectivitate)"
+                    filename.contains("dBR", ignoreCase = true) -> "dBR (Rată precipitații)"
+                    filename.contains("Height", ignoreCase = true) -> "Height (Înălțime ecou)"
+                    filename.contains("RhoHV", ignoreCase = true) -> "RhoHV (Coef. corelație)"
+                    filename.contains("ZDR", ignoreCase = true) -> "ZDR (Reflect. diferențială)"
+                    filename.contains("KDP", ignoreCase = true) -> "KDP (Fază diferențială)"
+                    filename.contains("V", ignoreCase = false) -> "V (Viteză Doppler)"
+                    else -> "HDF5 Scan"
+                }
+
+                // Extract time from YYYYMMDDHHMM or similar pattern in filename
+                val timeMatch = Pattern.compile("(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})").matcher(filename)
+                val timeLabel = if (timeMatch.find()) {
+                    val hh = timeMatch.group(4)
+                    val mm = timeMatch.group(5)
+                    "$hh:$mm UTC"
+                } else ""
+
+                val displayTime = when {
+                    serverDate.isNotEmpty() && timeLabel.isNotEmpty() -> "$serverDate ($timeLabel)"
+                    serverDate.isNotEmpty() -> serverDate
+                    timeLabel.isNotEmpty() -> timeLabel
+                    else -> "Scan recent"
+                }
 
                 allMatches.add(
                     RadarStationFileItem(
                         filename = filename,
                         productType = product,
-                        timestampStr = "$serverDate ($formattedTime)",
-                        fileSizeStr = size,
+                        timestampStr = displayTime,
+                        fileSizeStr = if (size.isNotEmpty()) size else "N/A",
                         downloadUrl = "$url$filename"
                     )
                 )
@@ -673,7 +711,7 @@ object AnmRemoteDataSource {
                     result.add(
                         RainViewerRadarFrame(
                             timeUnix = time,
-                            path = "$host$path",
+                            path = if (path.startsWith("http")) path else "$host$path",
                             formattedTime = sdf.format(date),
                             isNowcast = false
                         )
@@ -690,7 +728,7 @@ object AnmRemoteDataSource {
                     result.add(
                         RainViewerRadarFrame(
                             timeUnix = time,
-                            path = "$host$path",
+                            path = if (path.startsWith("http")) path else "$host$path",
                             formattedTime = "${sdf.format(date)} (Prognoză)",
                             isNowcast = true
                         )
@@ -701,6 +739,108 @@ object AnmRemoteDataSource {
             e.printStackTrace()
         }
         result
+    }
+
+    // --- EUMETSAT / MTG & Sat24 Romania Satellite Imagery ---
+    suspend fun getEumetsatFrames(layerMode: com.example.model.EumetsatLayerMode): List<com.example.model.EumetsatSatelliteFrame> = withContext(Dispatchers.IO) {
+        val timestamps = mutableListOf<String>()
+        try {
+            val request = Request.Builder()
+                .url("https://sat24.com/en-gb/country/ro")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .build()
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val body = response.body?.string() ?: ""
+
+                val keyName = when (layerMode) {
+                    com.example.model.EumetsatLayerMode.VISIBLE -> "euVisible"
+                    com.example.model.EumetsatLayerMode.INFRARED -> "euInfra"
+                    com.example.model.EumetsatLayerMode.NIGHT_MICROPHYSICS -> "euMicro"
+                    com.example.model.EumetsatLayerMode.MTG -> "satEuropeMTG"
+                }
+
+                val layerBlockRegex = Regex("""\['$keyName'\]\s*=\s*\{[^}]*radarLayers:\s*\[(.*?)\]\}""")
+                val blockMatch = layerBlockRegex.find(body)
+                if (blockMatch != null) {
+                    val subText = blockMatch.groupValues[1]
+                    val subTimestamps = Regex("""\"layername\":\"([0-9]{12})\"""").findAll(subText)
+                        .map { it.groupValues[1] }.distinct().toList()
+                    if (subTimestamps.isNotEmpty()) {
+                        timestamps.addAll(subTimestamps.sorted())
+                    }
+                }
+
+                if (timestamps.isEmpty()) {
+                    val regex = Regex("""${layerMode.layerId}/([0-9]{12})""")
+                    val matches = regex.findAll(body).map { it.groupValues[1] }.distinct().toList()
+                    if (matches.isNotEmpty()) {
+                        timestamps.addAll(matches.sorted())
+                    }
+                }
+
+                if (timestamps.isEmpty()) {
+                    val allLayernames = Regex("""\"layername\":\"([0-9]{12})\"""").findAll(body)
+                        .map { it.groupValues[1] }.distinct().toList()
+                    if (allLayernames.isNotEmpty()) {
+                        timestamps.addAll(allLayernames.sorted())
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Fallback: If network scrape was empty, generate dynamic 10-15 min intervals
+        if (timestamps.isEmpty()) {
+            val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+            val minute = cal.get(java.util.Calendar.MINUTE)
+            val roundedMinute = (minute / 10) * 10
+            cal.set(java.util.Calendar.MINUTE, roundedMinute)
+            cal.set(java.util.Calendar.SECOND, 0)
+            cal.set(java.util.Calendar.MILLISECOND, 0)
+            cal.add(java.util.Calendar.MINUTE, -20)
+
+            val sdfUtc = SimpleDateFormat("yyyyMMddHHmm", Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }
+            val temp = mutableListOf<String>()
+            for (i in 0 until 18) {
+                temp.add(sdfUtc.format(cal.time))
+                cal.add(java.util.Calendar.MINUTE, -10)
+            }
+            timestamps.addAll(temp.reversed())
+        }
+
+        val roSdf = SimpleDateFormat("HH:mm", Locale.getDefault()).apply {
+            timeZone = java.util.TimeZone.getTimeZone("Europe/Bucharest")
+        }
+        val utcSdf = SimpleDateFormat("HH:mm 'UTC'", Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }
+        val parseSdf = SimpleDateFormat("yyyyMMddHHmm", Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }
+
+        val recentTimestamps = if (timestamps.size > 24) timestamps.takeLast(24) else timestamps
+
+        recentTimestamps.mapNotNull { ts ->
+            try {
+                val date = parseSdf.parse(ts) ?: return@mapNotNull null
+                val roTime = roSdf.format(date)
+                val utcTime = utcSdf.format(date)
+                val imageUrl = "https://imn-rust-lb.infoplaza.io/v4/nowcast/tiles/${layerMode.layerId}/$ts/7/42/69/49/76?outputtype=jpeg"
+                com.example.model.EumetsatSatelliteFrame(
+                    timestampId = ts,
+                    formattedTime = "$roTime (RO)",
+                    timeUtc = utcTime,
+                    layerMode = layerMode,
+                    imageUrl = imageUrl
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }
     }
 }
 

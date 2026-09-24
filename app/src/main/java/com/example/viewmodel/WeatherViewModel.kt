@@ -1,9 +1,11 @@
 package com.example.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
+import com.example.data.local.UserPreferencesManager
 import com.example.data.remote.AnmRemoteDataSource
 import com.example.data.repository.WeatherRepository
 import com.example.model.AnmProductItem
@@ -11,6 +13,8 @@ import com.example.model.AnmRadarFrame
 import com.example.model.AnmWarningItem
 import com.example.model.AppLanguage
 import com.example.model.AppNavTab
+import com.example.model.EumetsatLayerMode
+import com.example.model.EumetsatSatelliteFrame
 import com.example.model.ForecastCategory
 import com.example.model.LocationItem
 import com.example.model.MeteosatChannelInfo
@@ -21,6 +25,7 @@ import com.example.model.RadarStationInfo
 import com.example.model.RainViewerRadarFrame
 import com.example.model.WeatherForecastResult
 import com.example.model.WeatherModel
+import com.example.util.LocationTracker
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +49,8 @@ sealed interface ForecastUiState {
 class WeatherViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AppDatabase.getDatabase(application, viewModelScope)
     private val repository = WeatherRepository(database)
+    private val preferencesManager = UserPreferencesManager(application)
+    private val locationTracker = LocationTracker(application)
 
     val savedLocations: StateFlow<List<LocationItem>> = repository.getSavedLocations()
         .stateIn(
@@ -52,23 +59,31 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
             initialValue = LocationItem.DEFAULT_LOCATIONS.take(3)
         )
 
-    private val _currentLocation = MutableStateFlow(LocationItem.DEFAULT_LOCATIONS.first())
+    private val _currentLocation = MutableStateFlow(
+        preferencesManager.getLastLocation() ?: LocationItem.DEFAULT_LOCATIONS.first()
+    )
     val currentLocation: StateFlow<LocationItem> = _currentLocation.asStateFlow()
 
-    private val _selectedCategory = MutableStateFlow(ForecastCategory.SHORT_TERM)
+    private val _selectedCategory = MutableStateFlow(ForecastCategory.FORECAST)
     val selectedCategory: StateFlow<ForecastCategory> = _selectedCategory.asStateFlow()
 
-    private val _selectedModel = MutableStateFlow(WeatherModel.WEATHERNEXT_3_SHORT)
+    private val _selectedModel = MutableStateFlow(WeatherModel.ICON_EU_FLASH)
     val selectedModel: StateFlow<WeatherModel> = _selectedModel.asStateFlow()
 
     private val _forecastState = MutableStateFlow<ForecastUiState>(ForecastUiState.Loading)
     val forecastState: StateFlow<ForecastUiState> = _forecastState.asStateFlow()
 
-    private val _language = MutableStateFlow(AppLanguage.ROMANIAN)
+    private val _language = MutableStateFlow(preferencesManager.getLanguage())
     val language: StateFlow<AppLanguage> = _language.asStateFlow()
 
-    private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
+    private val _themeMode = MutableStateFlow(preferencesManager.getThemeMode())
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    private val _isLocatingGps = MutableStateFlow(false)
+    val isLocatingGps: StateFlow<Boolean> = _isLocatingGps.asStateFlow()
+
+    private val _gpsMessage = MutableStateFlow<String?>(null)
+    val gpsMessage: StateFlow<String?> = _gpsMessage.asStateFlow()
 
     private val _currentNavTab = MutableStateFlow(AppNavTab.FORECASTS)
     val currentNavTab: StateFlow<AppNavTab> = _currentNavTab.asStateFlow()
@@ -143,6 +158,22 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     private val _isLoadingRainViewer = MutableStateFlow(false)
     val isLoadingRainViewer: StateFlow<Boolean> = _isLoadingRainViewer.asStateFlow()
 
+    // EUMETSAT / MTG Satellite State
+    private val _selectedEumetsatLayerMode = MutableStateFlow(EumetsatLayerMode.VISIBLE)
+    val selectedEumetsatLayerMode: StateFlow<EumetsatLayerMode> = _selectedEumetsatLayerMode.asStateFlow()
+
+    private val _eumetsatFrames = MutableStateFlow<List<EumetsatSatelliteFrame>>(emptyList())
+    val eumetsatFrames: StateFlow<List<EumetsatSatelliteFrame>> = _eumetsatFrames.asStateFlow()
+
+    private val _currentEumetsatIndex = MutableStateFlow(0)
+    val currentEumetsatIndex: StateFlow<Int> = _currentEumetsatIndex.asStateFlow()
+
+    private val _isEumetsatPlaying = MutableStateFlow(false)
+    val isEumetsatPlaying: StateFlow<Boolean> = _isEumetsatPlaying.asStateFlow()
+
+    private val _isLoadingEumetsat = MutableStateFlow(false)
+    val isLoadingEumetsat: StateFlow<Boolean> = _isLoadingEumetsat.asStateFlow()
+
     private val _searchResults = MutableStateFlow<List<LocationItem>>(emptyList())
     val searchResults: StateFlow<List<LocationItem>> = _searchResults.asStateFlow()
 
@@ -156,6 +187,7 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     private var stationFilesJob: Job? = null
     private var meteosatJob: Job? = null
     private var rainViewerJob: Job? = null
+    private var eumetsatJob: Job? = null
 
     init {
         loadForecast(forceRefresh = false)
@@ -164,14 +196,50 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
         loadStationFiles(radarStations.first().code)
         loadMeteosatFrames(meteosatChannels.first().tipNumber)
         loadRainViewerFrames()
+        loadEumetsatFrames(EumetsatLayerMode.VISIBLE)
     }
 
     fun selectLocation(location: LocationItem) {
+        preferencesManager.saveLastLocation(location)
         if (_currentLocation.value.latitude != location.latitude ||
             _currentLocation.value.longitude != location.longitude) {
             _currentLocation.value = location
             loadForecast(forceRefresh = false)
         }
+    }
+
+    fun requestGpsLocation(
+        onSuccess: ((LocationItem) -> Unit)? = null,
+        onError: ((String) -> Unit)? = null
+    ) {
+        if (_isLocatingGps.value) return
+        viewModelScope.launch {
+            _isLocatingGps.value = true
+            _gpsMessage.value = "gps_locating"
+            try {
+                val loc = locationTracker.getCurrentLocation()
+                if (loc != null) {
+                    selectLocation(loc)
+                    // Also save to database so it stays in user's saved list
+                    repository.saveLocation(loc)
+                    _gpsMessage.value = null
+                    onSuccess?.invoke(loc)
+                } else {
+                    _gpsMessage.value = "gps_error"
+                    onError?.invoke("gps_error")
+                }
+            } catch (e: Exception) {
+                Log.e("WeatherViewModel", "GPS lookup error", e)
+                _gpsMessage.value = "gps_error"
+                onError?.invoke("gps_error")
+            } finally {
+                _isLocatingGps.value = false
+            }
+        }
+    }
+
+    fun clearGpsMessage() {
+        _gpsMessage.value = null
     }
 
     fun selectCategory(category: ForecastCategory) {
@@ -199,10 +267,12 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 
     fun setLanguage(lang: AppLanguage) {
         _language.value = lang
+        preferencesManager.saveLanguage(lang)
     }
 
     fun setThemeMode(mode: ThemeMode) {
         _themeMode.value = mode
+        preferencesManager.saveThemeMode(mode)
     }
 
     fun refreshForecast() {
@@ -410,5 +480,46 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
             _generalWarnings.value = general
             _isLoadingAnm.value = false
         }
+    }
+
+    // --- EUMETSAT / MTG Satellite Methods ---
+    fun selectEumetsatLayer(mode: EumetsatLayerMode) {
+        _selectedEumetsatLayerMode.value = mode
+        loadEumetsatFrames(mode)
+    }
+
+    fun loadEumetsatFrames(mode: EumetsatLayerMode = _selectedEumetsatLayerMode.value) {
+        eumetsatJob?.cancel()
+        eumetsatJob = viewModelScope.launch {
+            _isLoadingEumetsat.value = true
+            val frames = AnmRemoteDataSource.getEumetsatFrames(mode)
+            _eumetsatFrames.value = frames
+            if (frames.isNotEmpty()) {
+                _currentEumetsatIndex.value = frames.size - 1
+            }
+            _isLoadingEumetsat.value = false
+        }
+    }
+
+    fun setEumetsatIndex(index: Int) {
+        if (index in 0 until _eumetsatFrames.value.size) {
+            _currentEumetsatIndex.value = index
+        }
+    }
+
+    fun toggleEumetsatPlayback() {
+        _isEumetsatPlaying.value = !_isEumetsatPlaying.value
+    }
+
+    fun stepEumetsatFrame(forward: Boolean) {
+        val frames = _eumetsatFrames.value
+        if (frames.isEmpty()) return
+        val current = _currentEumetsatIndex.value
+        val next = if (forward) {
+            (current + 1) % frames.size
+        } else {
+            if (current - 1 < 0) frames.size - 1 else current - 1
+        }
+        _currentEumetsatIndex.value = next
     }
 }

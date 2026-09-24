@@ -2,14 +2,10 @@ package com.example.ui.components
 
 import android.content.Intent
 import android.net.Uri
-import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,10 +28,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
-import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.OpenInNew
@@ -45,7 +39,6 @@ import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Radar
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Sensors
-import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.ZoomIn
 import androidx.compose.material.icons.rounded.ZoomOutMap
@@ -82,11 +75,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -97,13 +87,15 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.SubcomposeAsyncImage
 import com.example.model.AnmRadarFrame
 import com.example.model.AppLanguage
+import com.example.model.EumetsatLayerMode
+import com.example.model.EumetsatSatelliteFrame
 import com.example.model.MeteosatChannelInfo
 import com.example.model.MeteosatFrame
 import com.example.model.RadarSatelliteSubTab
-import com.example.model.RadarStationFileItem
 import com.example.model.RadarStationInfo
 import com.example.model.RainViewerRadarFrame
 import com.example.model.Translations
+import com.example.viewmodel.ThemeMode
 import com.example.viewmodel.WeatherViewModel
 import kotlinx.coroutines.delay
 
@@ -122,8 +114,6 @@ fun RadarSatelliteScreen(
     val isLoadingRadar by viewModel.isLoadingRadar.collectAsState()
 
     val selectedStation by viewModel.selectedRadarStation.collectAsState()
-    val stationFiles by viewModel.stationFiles.collectAsState()
-    val isLoadingStationFiles by viewModel.isLoadingStationFiles.collectAsState()
 
     val selectedChannel by viewModel.selectedMeteosatChannel.collectAsState()
     val meteosatFrames by viewModel.meteosatFrames.collectAsState()
@@ -135,9 +125,24 @@ fun RadarSatelliteScreen(
     val isRainViewerPlaying by viewModel.isRainViewerPlaying.collectAsState()
     val isLoadingRainViewer by viewModel.isLoadingRainViewer.collectAsState()
 
+    val eumetsatFrames by viewModel.eumetsatFrames.collectAsState()
+    val selectedEumetsatLayerMode by viewModel.selectedEumetsatLayerMode.collectAsState()
+    val currentEumetsatIndex by viewModel.currentEumetsatIndex.collectAsState()
+    val isEumetsatPlaying by viewModel.isEumetsatPlaying.collectAsState()
+    val isLoadingEumetsat by viewModel.isLoadingEumetsat.collectAsState()
+
+    val themeMode by viewModel.themeMode.collectAsState()
+    val systemDark = isSystemInDarkTheme()
+    val isDarkTheme = when (themeMode) {
+        ThemeMode.SYSTEM -> systemDark
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+
     val context = LocalContext.current
     var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
     var fullScreenTitle by remember { mutableStateOf("") }
+    var isMapFullscreen by remember { mutableStateOf(false) }
 
     // National Radar loop playback effect
     LaunchedEffect(isPlaying, playbackSpeedMs, nationalFrames.size) {
@@ -153,8 +158,18 @@ fun RadarSatelliteScreen(
     LaunchedEffect(isRainViewerPlaying, rainViewerFrames.size) {
         if (isRainViewerPlaying && rainViewerFrames.isNotEmpty()) {
             while (true) {
-                delay(500)
+                delay(600)
                 viewModel.stepRainViewerFrame(forward = true)
+            }
+        }
+    }
+
+    // EUMETSAT loop playback effect
+    LaunchedEffect(isEumetsatPlaying, eumetsatFrames.size) {
+        if (isEumetsatPlaying && eumetsatFrames.isNotEmpty()) {
+            while (true) {
+                delay(500)
+                viewModel.stepEumetsatFrame(forward = true)
             }
         }
     }
@@ -171,10 +186,12 @@ fun RadarSatelliteScreen(
                 subTab = subTab,
                 onRefresh = {
                     when (subTab) {
-                        RadarSatelliteSubTab.NATIONAL_RADAR -> viewModel.loadNationalRadar()
-                        RadarSatelliteSubTab.RADAR_STATIONS -> viewModel.loadStationFiles(selectedStation.code)
+                        RadarSatelliteSubTab.NATIONAL_RADAR, RadarSatelliteSubTab.RADAR_STATIONS -> viewModel.loadNationalRadar()
                         RadarSatelliteSubTab.RAINVIEWER_RADAR -> viewModel.loadRainViewerFrames()
-                        RadarSatelliteSubTab.METEOSAT -> viewModel.loadMeteosatFrames(selectedChannel.tipNumber)
+                        RadarSatelliteSubTab.METEOSAT -> {
+                            viewModel.loadEumetsatFrames()
+                            viewModel.loadMeteosatFrames(selectedChannel.tipNumber)
+                        }
                     }
                 },
                 lang = lang
@@ -185,53 +202,46 @@ fun RadarSatelliteScreen(
         item {
             RadarSubTabBar(
                 selectedTab = subTab,
-                onSelectTab = { viewModel.selectRadarSubTab(it) },
+                onSelectTab = { tab ->
+                    viewModel.selectRadarSubTab(tab)
+                    if (tab == RadarSatelliteSubTab.RADAR_STATIONS && selectedStation.code == "COMPOSITE") {
+                        // Switch to Bobohalma as primary individual station
+                        val bob = viewModel.radarStations.find { it.code == "BOB" }
+                        if (bob != null) {
+                            viewModel.selectRadarStation(bob)
+                        }
+                    }
+                },
                 lang = lang
             )
         }
 
         // --- Active Sub-Tab Content ---
         when (subTab) {
-            RadarSatelliteSubTab.NATIONAL_RADAR -> {
+            RadarSatelliteSubTab.NATIONAL_RADAR, RadarSatelliteSubTab.RADAR_STATIONS -> {
                 item {
-                    NationalRadarView(
+                    InteractiveRadarCompositeView(
                         frames = nationalFrames,
                         currentIndex = currentFrameIndex,
                         isPlaying = isPlaying,
                         opacity = radarOpacity,
                         playbackSpeedMs = playbackSpeedMs,
                         isLoading = isLoadingRadar,
+                        selectedStation = selectedStation,
+                        allStations = viewModel.radarStations,
+                        isDarkTheme = isDarkTheme,
                         onIndexChange = { viewModel.setRadarFrameIndex(it) },
                         onTogglePlay = { viewModel.toggleRadarPlayback() },
                         onStep = { viewModel.stepRadarFrame(it) },
                         onOpacityChange = { viewModel.setRadarOpacity(it) },
                         onSpeedChange = { viewModel.setRadarPlaybackSpeed(it) },
-                        onOpenFullScreen = { url, title ->
-                            fullScreenImageUrl = url
-                            fullScreenTitle = title
-                        },
+                        onSelectStation = { viewModel.selectRadarStation(it) },
+                        onToggleFullscreen = { isMapFullscreen = true },
                         onOpenWeb = {
                             val intent = Intent(
                                 Intent.ACTION_VIEW,
                                 Uri.parse("https://www.meteoromania.ro/radarm/radar.index.php")
                             )
-                            context.startActivity(intent)
-                        },
-                        lang = lang
-                    )
-                }
-            }
-
-            RadarSatelliteSubTab.RADAR_STATIONS -> {
-                item {
-                    RadarStationsView(
-                        stations = viewModel.radarStations,
-                        selectedStation = selectedStation,
-                        stationFiles = stationFiles,
-                        isLoadingFiles = isLoadingStationFiles,
-                        onSelectStation = { viewModel.selectRadarStation(it) },
-                        onOpenWeb = { url ->
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             context.startActivity(intent)
                         },
                         lang = lang
@@ -245,14 +255,14 @@ fun RadarSatelliteScreen(
                         frames = rainViewerFrames,
                         currentIndex = currentRainViewerIndex,
                         isPlaying = isRainViewerPlaying,
+                        opacity = radarOpacity,
                         isLoading = isLoadingRainViewer,
+                        isDarkTheme = isDarkTheme,
                         onIndexChange = { viewModel.setRainViewerIndex(it) },
                         onTogglePlay = { viewModel.toggleRainViewerPlayback() },
                         onStep = { viewModel.stepRainViewerFrame(it) },
-                        onOpenFullScreen = { url, title ->
-                            fullScreenImageUrl = url
-                            fullScreenTitle = title
-                        },
+                        onOpacityChange = { viewModel.setRadarOpacity(it) },
+                        onToggleFullscreen = { isMapFullscreen = true },
                         lang = lang
                     )
                 }
@@ -260,14 +270,23 @@ fun RadarSatelliteScreen(
 
             RadarSatelliteSubTab.METEOSAT -> {
                 item {
-                    MeteosatSatelliteView(
+                    EumetsatSatelliteView(
+                        eumetsatFrames = eumetsatFrames,
+                        selectedEumetsatLayerMode = selectedEumetsatLayerMode,
+                        currentEumetsatIndex = currentEumetsatIndex,
+                        isEumetsatPlaying = isEumetsatPlaying,
+                        isLoadingEumetsat = isLoadingEumetsat,
                         channels = viewModel.meteosatChannels,
                         selectedChannel = selectedChannel,
-                        frames = meteosatFrames,
-                        selectedFrame = selectedMeteosatFrame,
-                        isLoading = isLoadingMeteosat,
+                        meteosatFrames = meteosatFrames,
+                        selectedMeteosatFrame = selectedMeteosatFrame,
+                        isLoadingMeteosat = isLoadingMeteosat,
+                        onSelectEumetsatLayer = { viewModel.selectEumetsatLayer(it) },
+                        onSelectEumetsatIndex = { viewModel.setEumetsatIndex(it) },
+                        onToggleEumetsatPlay = { viewModel.toggleEumetsatPlayback() },
+                        onStepEumetsat = { viewModel.stepEumetsatFrame(it) },
                         onSelectChannel = { viewModel.selectMeteosatChannel(it) },
-                        onSelectFrame = { viewModel.selectMeteosatFrame(it) },
+                        onSelectMeteosatFrame = { viewModel.selectMeteosatFrame(it) },
                         onOpenFullScreen = { url, title ->
                             fullScreenImageUrl = url
                             fullScreenTitle = title
@@ -275,7 +294,7 @@ fun RadarSatelliteScreen(
                         onOpenWeb = {
                             val intent = Intent(
                                 Intent.ACTION_VIEW,
-                                Uri.parse("https://www.meteoromania.ro/sateliti/index.php?tip=${selectedChannel.tipNumber}")
+                                Uri.parse("https://sat24.com/en-gb/country/ro")
                             )
                             context.startActivity(intent)
                         },
@@ -286,7 +305,71 @@ fun RadarSatelliteScreen(
         }
     }
 
-    // Fullscreen Zoom Dialog
+    // Fullscreen Interactive Radar Map Dialog
+    if (isMapFullscreen) {
+        Dialog(
+            onDismissRequest = { isMapFullscreen = false },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = false
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                if (subTab == RadarSatelliteSubTab.RAINVIEWER_RADAR) {
+                    val currentRvFrame = rainViewerFrames.getOrNull(currentRainViewerIndex)
+                    RadarMapView(
+                        mode = RadarMapMode.RAINVIEWER_RADAR,
+                        currentRadarImageUrl = null,
+                        rainViewerTilePath = currentRvFrame?.path,
+                        opacity = radarOpacity,
+                        selectedStation = null,
+                        allStations = emptyList(),
+                        isDarkTheme = isDarkTheme,
+                        onSelectStation = {},
+                        isFullscreen = true,
+                        onToggleFullscreen = { isMapFullscreen = false }
+                    )
+                } else {
+                    val currentNatFrame = nationalFrames.getOrNull(currentFrameIndex)
+                    RadarMapView(
+                        mode = RadarMapMode.ANM_RADAR,
+                        currentRadarImageUrl = currentNatFrame?.imageUrl,
+                        rainViewerTilePath = null,
+                        opacity = radarOpacity,
+                        selectedStation = selectedStation,
+                        allStations = viewModel.radarStations,
+                        isDarkTheme = isDarkTheme,
+                        onSelectStation = { viewModel.selectRadarStation(it) },
+                        isFullscreen = true,
+                        onToggleFullscreen = { isMapFullscreen = false }
+                    )
+                }
+
+                // Close Button in Top Left
+                IconButton(
+                    onClick = { isMapFullscreen = false },
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(16.dp)
+                        .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                        .size(42.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.Close,
+                        contentDescription = "Închide ecran complet",
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+    }
+
+    // Image Zoom Dialog for Meteosat
     fullScreenImageUrl?.let { imageUrl ->
         RadarInteractiveZoomDialog(
             imageUrl = imageUrl,
@@ -348,14 +431,20 @@ private fun RadarHeader(
                         Text(
                             text = Translations.get("nav_radar_satellite", lang),
                             style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.ExtraBold,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         )
                         Text(
-                            text = "ANM OpenData • METEOSAT • Doppler",
+                            text = when (subTab) {
+                                RadarSatelliteSubTab.NATIONAL_RADAR -> "ANM Doppler • Hartă Live & Mozaic Național"
+                                RadarSatelliteSubTab.RADAR_STATIONS -> "Cele 7 Stații Doppler ANM (Bobohalma, Oradea...)"
+                                RadarSatelliteSubTab.RAINVIEWER_RADAR -> "RainViewer API • Radar Mondial & Nowcast"
+                                RadarSatelliteSubTab.METEOSAT -> "EUMETSAT METEOSAT-10 • Canale IR & Vizibil"
+                            },
                             style = MaterialTheme.typography.bodySmall.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
                             )
                         )
                     }
@@ -364,15 +453,16 @@ private fun RadarHeader(
                 IconButton(
                     onClick = onRefresh,
                     modifier = Modifier
-                        .size(38.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f), CircleShape)
-                        .testTag("radar_refresh_button")
+                        .size(40.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            CircleShape
+                        )
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Refresh,
-                        contentDescription = "Refresh",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        contentDescription = "Actualizează",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -404,7 +494,7 @@ private fun RadarSubTabBar(
             onClick = { onSelectTab(RadarSatelliteSubTab.NATIONAL_RADAR) },
             text = {
                 Text(
-                    text = Translations.get("tab_national_radar", lang),
+                    text = "Radar România",
                     fontWeight = if (selectedTab == RadarSatelliteSubTab.NATIONAL_RADAR) FontWeight.Bold else FontWeight.Medium
                 )
             },
@@ -416,7 +506,7 @@ private fun RadarSubTabBar(
             onClick = { onSelectTab(RadarSatelliteSubTab.RADAR_STATIONS) },
             text = {
                 Text(
-                    text = Translations.get("tab_radar_stations", lang),
+                    text = "Radare Individuale",
                     fontWeight = if (selectedTab == RadarSatelliteSubTab.RADAR_STATIONS) FontWeight.Bold else FontWeight.Medium
                 )
             },
@@ -428,7 +518,7 @@ private fun RadarSubTabBar(
             onClick = { onSelectTab(RadarSatelliteSubTab.RAINVIEWER_RADAR) },
             text = {
                 Text(
-                    text = Translations.get("tab_rainviewer", lang),
+                    text = "Radar Global",
                     fontWeight = if (selectedTab == RadarSatelliteSubTab.RAINVIEWER_RADAR) FontWeight.Bold else FontWeight.Medium
                 )
             },
@@ -440,7 +530,7 @@ private fun RadarSubTabBar(
             onClick = { onSelectTab(RadarSatelliteSubTab.METEOSAT) },
             text = {
                 Text(
-                    text = Translations.get("tab_satellite", lang),
+                    text = "Satelit (EUMETSAT / MTG)",
                     fontWeight = if (selectedTab == RadarSatelliteSubTab.METEOSAT) FontWeight.Bold else FontWeight.Medium
                 )
             },
@@ -450,22 +540,26 @@ private fun RadarSubTabBar(
 }
 
 // -------------------------------------------------------------------------
-// Sub-View 1: National Radar Composite
+// Sub-View 1 & 2: Interactive Radar View (National + Individual Stations)
 // -------------------------------------------------------------------------
 @Composable
-private fun NationalRadarView(
+private fun InteractiveRadarCompositeView(
     frames: List<AnmRadarFrame>,
     currentIndex: Int,
     isPlaying: Boolean,
     opacity: Float,
     playbackSpeedMs: Long,
     isLoading: Boolean,
+    selectedStation: RadarStationInfo,
+    allStations: List<RadarStationInfo>,
+    isDarkTheme: Boolean,
     onIndexChange: (Int) -> Unit,
     onTogglePlay: () -> Unit,
     onStep: (Boolean) -> Unit,
     onOpacityChange: (Float) -> Unit,
     onSpeedChange: (Long) -> Unit,
-    onOpenFullScreen: (String, String) -> Unit,
+    onSelectStation: (RadarStationInfo) -> Unit,
+    onToggleFullscreen: () -> Unit,
     onOpenWeb: () -> Unit,
     lang: AppLanguage,
     modifier: Modifier = Modifier
@@ -478,7 +572,54 @@ private fun NationalRadarView(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Main Radar Screen Card
+        // Station Selector Chips Row
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Selectează Radar / Stație Doppler:",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                )
+
+                if (selectedStation.code != "COMPOSITE") {
+                    Text(
+                        text = "Rază: ${selectedStation.coverageRadiusKm} km",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = Color(0xFF0284C7),
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
+            }
+
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(horizontal = 2.dp)
+            ) {
+                items(allStations) { station ->
+                    val isSelected = station.code == selectedStation.code
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onSelectStation(station) },
+                        label = {
+                            Text(
+                                text = if (station.code == "COMPOSITE") "🇷🇴 Mozaic Național" else "📡 ${station.name}",
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF0284C7),
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+            }
+        }
+
+        // Main Radar Screen Card (Interactive Leaflet Map with Real Base Tiles)
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -486,118 +627,76 @@ private fun NationalRadarView(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // Interactive Radar Canvas Box
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(1.22f)
-                        .background(Color(0xFF0F172A))
-                        .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)),
-                    contentAlignment = Alignment.Center
+                        .height(390.dp)
+                        .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                 ) {
-                    if (currentFrame != null) {
-                        SubcomposeAsyncImage(
-                            model = currentFrame.imageUrl,
-                            contentDescription = "Radar Frame ${currentFrame.timeString}",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer(alpha = opacity),
-                            loading = {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator(
-                                        color = Color(0xFF38BDF8),
-                                        modifier = Modifier.size(36.dp)
-                                    )
-                                }
-                            }
-                        )
-                    } else if (isLoading) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            CircularProgressIndicator(color = Color(0xFF38BDF8))
-                            Text(
-                                text = "Se încarcă radarul național ANM…",
-                                color = Color.White,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    } else {
-                        Text(
-                            text = "Date radar indisponibile momentan",
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
+                    // Leaflet Radar Map View
+                    RadarMapView(
+                        mode = RadarMapMode.ANM_RADAR,
+                        currentRadarImageUrl = currentFrame?.imageUrl,
+                        rainViewerTilePath = null,
+                        opacity = opacity,
+                        selectedStation = selectedStation,
+                        allStations = allStations,
+                        isDarkTheme = isDarkTheme,
+                        onSelectStation = onSelectStation,
+                        height = 390.dp,
+                        onToggleFullscreen = onToggleFullscreen
+                    )
 
-                    // Top Floating Time Badge
-                    currentFrame?.let { frame ->
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = Color.Black.copy(alpha = 0.72f),
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(12.dp)
+                    // Top Floating Frame Timestamp & Station Badge
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color.Black.copy(alpha = 0.76f),
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isPlaying) Color(0xFF10B981) else Color(0xFFEAB308))
-                                )
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isPlaying) Color(0xFF10B981) else Color(0xFFEAB308))
+                            )
+                            Text(
+                                text = currentFrame?.timeString ?: if (isLoading) "Se încarcă…" else "Live ANM",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                            if (frames.isNotEmpty()) {
                                 Text(
-                                    text = frame.timeString,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp
+                                    text = "(${currentIndex + 1}/${frames.size})",
+                                    color = Color.White.copy(alpha = 0.75f),
+                                    fontSize = 11.sp
                                 )
                             }
                         }
                     }
 
-                    // Top Right Fullscreen Button
-                    currentFrame?.let { frame ->
-                        IconButton(
-                            onClick = { onOpenFullScreen(frame.imageUrl, "Radar Național ANM - ${frame.timeString}") },
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(12.dp)
-                                .background(Color.Black.copy(alpha = 0.65f), CircleShape)
-                                .size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.ZoomOutMap,
-                                contentDescription = "Full Screen",
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-
-                    // Bottom Right Frame Counter
-                    if (frames.isNotEmpty()) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.Black.copy(alpha = 0.65f),
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(10.dp)
-                        ) {
-                            Text(
-                                text = "${currentIndex + 1} / ${frames.size}",
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
+                    // Bottom Floating Active Station Name
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.Black.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = if (selectedStation.code == "COMPOSITE") "România (Toată Țara)" else "${selectedStation.name} • ${selectedStation.band}",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
                     }
                 }
 
@@ -677,7 +776,7 @@ private fun NationalRadarView(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = Translations.get("radar_speed", lang),
+                                text = "Viteză:",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -715,13 +814,106 @@ private fun NationalRadarView(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "${(opacity * 100).toInt()}%",
+                                text = "Opacitate: ${(opacity * 100).toInt()}%",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
+
+                    // Opacity Slider
+                    Slider(
+                        value = opacity,
+                        onValueChange = onOpacityChange,
+                        valueRange = 0.3f..1.0f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color(0xFF0284C7),
+                            activeTrackColor = Color(0xFF0284C7)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+
+        // Selected Station Technical Profile Card (When Individual Station is Active)
+        if (selectedStation.code != "COMPOSITE") {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Stația Radar ${selectedStation.name} (${selectedStation.code})",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = "${selectedStation.county} • ${selectedStation.locationName}",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF0284C7).copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = selectedStation.band,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0284C7)
+                                ),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    // Metric Badges
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SpecMetricBox(
+                            title = "Coordonate",
+                            value = selectedStation.coordinates,
+                            modifier = Modifier.weight(1.2f)
+                        )
+                        SpecMetricBox(
+                            title = "Altitudine",
+                            value = "${selectedStation.elevationMeters} m",
+                            modifier = Modifier.weight(0.8f)
+                        )
+                        SpecMetricBox(
+                            title = "Rază Acoperire",
+                            value = "${selectedStation.coverageRadiusKm} km",
+                            modifier = Modifier.weight(0.9f)
+                        )
+                    }
+
+                    Text(
+                        text = selectedStation.descriptionRo,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 18.sp
+                        )
+                    )
                 }
             }
         }
@@ -729,520 +921,35 @@ private fun NationalRadarView(
         // dBZ Reflectivity Legend Card
         RadarDbzLegendCard(lang = lang)
 
-        // Radar Info & Open ANM Link Card
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
-            modifier = Modifier.fillMaxWidth()
+        // Web Link Button
+        OutlinedButton(
+            onClick = onOpenWeb,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Info,
-                        contentDescription = null,
-                        tint = Color(0xFF0284C7),
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        text = "Despre Mozaicul Radar Național",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
-
-                Text(
-                    text = "Mozaicul radar ANM combină scanările volumetrice de la toate cele 7 radare meteorologice naționale Doppler (WSR-98D și C-Band) într-o singură proiecție compozită la nivel de țară. Datele se actualizează automat la fiecare 10 minute.",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 18.sp
-                    )
-                )
-
-                OutlinedButton(
-                    onClick = onOpenWeb,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Deschide Harta Radar pe meteoromania.ro")
-                }
-
-                val context = LocalContext.current
-                OutlinedButton(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://opendata.meteoromania.ro/radar/"))
-                        context.startActivity(intent)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Rounded.Folder, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Depozit OpenData Radar ANM (opendata.meteoromania.ro/radar/)")
-                }
-            }
+            Icon(Icons.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Deschide Portalul Radar ANM (meteoromania.ro)")
         }
     }
 }
 
 // -------------------------------------------------------------------------
-// Sub-View 2: 7 National Radar Stations (OpenData)
-// -------------------------------------------------------------------------
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun RadarStationsView(
-    stations: List<RadarStationInfo>,
-    selectedStation: RadarStationInfo,
-    stationFiles: List<RadarStationFileItem>,
-    isLoadingFiles: Boolean,
-    onSelectStation: (RadarStationInfo) -> Unit,
-    onOpenWeb: (String) -> Unit,
-    lang: AppLanguage,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
-    val openDataRootUrl = "https://opendata.meteoromania.ro/radar/"
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Dedicated OpenData Portal Card
-        Card(
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.Sensors,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = Translations.get("opendata_portal_title", lang),
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Text(
-                            text = Translations.get("opendata_portal_subtitle", lang),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        )
-                    }
-                }
-
-                // Official URL container pill
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = openDataRootUrl,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-
-                // Action buttons: Open Portal + Copy Link
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(openDataRootUrl))
-                            context.startActivity(intent)
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.weight(1.3f)
-                    ) {
-                        Icon(Icons.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Deschide Portalul",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            clipboardManager.setText(AnnotatedString(openDataRootUrl))
-                            Toast.makeText(
-                                context,
-                                Translations.get("link_copied", lang),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = Translations.get("copy_link", lang),
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-
-                // Quick server subdirectories
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Directoare disponibile în /radar/ (click pentru selectare):",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    )
-
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        val dirs = listOf("COMPOSITE", "BAR", "BOB", "BUC", "CRA", "MED", "ORA", "TIM")
-                        dirs.forEach { dir ->
-                            val isSelected = selectedStation.code == dir
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (isSelected)
-                                    MaterialTheme.colorScheme.primary
-                                else
-                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                                modifier = Modifier.clickable {
-                                    stations.find { it.code == dir }?.let { onSelectStation(it) }
-                                }
-                            ) {
-                                Text(
-                                    text = "$dir/",
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected)
-                                        MaterialTheme.colorScheme.onPrimary
-                                    else
-                                        MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Horizontal Stations Selector
-        Text(
-            text = "Selectează Stația Radar:",
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-        )
-
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(horizontal = 2.dp)
-        ) {
-            items(stations) { station ->
-                val isSelected = station.code == selectedStation.code
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { onSelectStation(station) },
-                    label = {
-                        Text(
-                            text = "${station.code} • ${station.name}",
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = if (station.code == "COMPOSITE") Icons.Rounded.Public else Icons.Rounded.Radar,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = Color(0xFF0284C7),
-                        selectedLabelColor = Color.White,
-                        selectedLeadingIconColor = Color.White
-                    )
-                )
-            }
-        }
-
-        // Station Details Card
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                // Station title & county
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column {
-                        Text(
-                            text = "Stația ${selectedStation.name} (${selectedStation.code})",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        )
-                        Text(
-                            text = "${selectedStation.county} • ${selectedStation.locationName}",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium
-                            )
-                        )
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF0284C7).copy(alpha = 0.15f)
-                    ) {
-                        Text(
-                            text = selectedStation.band,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0284C7)
-                            ),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-
-                // Grid specifications
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    SpecMetricBox(
-                        title = "Coordonate",
-                        value = selectedStation.coordinates,
-                        modifier = Modifier.weight(1f)
-                    )
-                    SpecMetricBox(
-                        title = "Altitudine",
-                        value = "${selectedStation.elevationMeters} m",
-                        modifier = Modifier.weight(0.7f)
-                    )
-                    SpecMetricBox(
-                        title = "Rază Acoperire",
-                        value = "${selectedStation.coverageRadiusKm} km",
-                        modifier = Modifier.weight(0.9f)
-                    )
-                }
-
-                // Description
-                Text(
-                    text = selectedStation.descriptionRo,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 20.sp
-                    )
-                )
-
-                // Parameters flow row
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = "Produse Volumetrice Disponibile:",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        selectedStation.parameters.forEach { param ->
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                            ) {
-                                Text(
-                                    text = param,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Open OpenData Folder Button
-                Button(
-                    onClick = { onOpenWeb(selectedStation.openDataUrl) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
-                ) {
-                    Icon(Icons.Rounded.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Deschide Depozit OpenData ANM (${selectedStation.code})",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        // Real-time Station Files Inspector
-        Card(
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Fișiere HDF5 Recente (${selectedStation.code})",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                    )
-
-                    if (isLoadingFiles) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                    }
-                }
-
-                if (stationFiles.isEmpty() && !isLoadingFiles) {
-                    Text(
-                        text = "Directoriul OpenData este accesibil la ${selectedStation.openDataUrl}",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    )
-                } else {
-                    stationFiles.forEach { file ->
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onOpenWeb(file.downloadUrl) }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = file.filename,
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = "${file.timestampStr} • ${file.fileSizeStr}",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    )
-                                }
-
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = Color(0xFF0284C7).copy(alpha = 0.2f)
-                                ) {
-                                    Text(
-                                        text = file.productType,
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF0284C7)
-                                        ),
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// -------------------------------------------------------------------------
-// Sub-View 3: RainViewer Open-Source Radar
+// Sub-View 3: Global Radar (RainViewer Open-Source API)
 // -------------------------------------------------------------------------
 @Composable
 private fun RainViewerRadarView(
     frames: List<RainViewerRadarFrame>,
     currentIndex: Int,
     isPlaying: Boolean,
+    opacity: Float,
     isLoading: Boolean,
+    isDarkTheme: Boolean,
     onIndexChange: (Int) -> Unit,
     onTogglePlay: () -> Unit,
     onStep: (Boolean) -> Unit,
-    onOpenFullScreen: (String, String) -> Unit,
+    onOpacityChange: (Float) -> Unit,
+    onToggleFullscreen: () -> Unit,
     lang: AppLanguage,
     modifier: Modifier = Modifier
 ) {
@@ -1277,11 +984,11 @@ private fun RainViewerRadarView(
                 )
                 Column {
                     Text(
-                        text = "Radar Global Open-Source (RainViewer)",
+                        text = "Radar Global Mondial (RainViewer)",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                     Text(
-                        text = "Integrare API globală cu scanări trecute (Past) și prognoză radar prin advecție atmosferică (Nowcast).",
+                        text = "Scanări radar europene și globale în timp real cu prognoză advectivă nowcast pe harta interactivă.",
                         style = MaterialTheme.typography.bodySmall.copy(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1290,175 +997,241 @@ private fun RainViewerRadarView(
             }
         }
 
-        // Radar Player Card
+        // Radar Player Card (Interactive Leaflet Map with Real Base Map & Tiles)
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                // Info on current frame
-                currentFrame?.let { frame ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(10.dp)
-                                    .clip(CircleShape)
-                                    .background(if (frame.isNowcast) Color(0xFF8B5CF6) else Color(0xFF10B981))
-                            )
-                            Text(
-                                text = frame.formattedTime,
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold
-                                )
-                            )
-                        }
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(390.dp)
+                        .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                ) {
+                    // RainViewer Leaflet Tile View
+                    RadarMapView(
+                        mode = RadarMapMode.RAINVIEWER_RADAR,
+                        currentRadarImageUrl = null,
+                        rainViewerTilePath = currentFrame?.path,
+                        opacity = opacity,
+                        selectedStation = null,
+                        allStations = emptyList(),
+                        isDarkTheme = isDarkTheme,
+                        onSelectStation = {},
+                        height = 390.dp,
+                        onToggleFullscreen = onToggleFullscreen
+                    )
 
+                    // Floating Time Info Badge
+                    currentFrame?.let { frame ->
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (frame.isNowcast) Color(0xFF8B5CF6).copy(alpha = 0.15f) else Color(0xFF10B981).copy(alpha = 0.15f)
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.Black.copy(alpha = 0.76f),
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(12.dp)
                         ) {
-                            Text(
-                                text = if (frame.isNowcast) "PROGNOZĂ NOWCAST" else "OBSERVAȚIE RADAR",
-                                style = MaterialTheme.typography.labelSmall.copy(
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(if (frame.isNowcast) Color(0xFF8B5CF6) else Color(0xFF10B981))
+                                )
+                                Text(
+                                    text = frame.formattedTime,
+                                    color = Color.White,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (frame.isNowcast) Color(0xFF8B5CF6) else Color(0xFF10B981)
-                                ),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
+                                    fontSize = 12.sp
+                                )
+                                Text(
+                                    text = if (frame.isNowcast) "PROGNOZĂ" else "RADAR LIVE",
+                                    color = if (frame.isNowcast) Color(0xFFC4B5FD) else Color(0xFF6EE7B7),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp
+                                )
+                            }
                         }
                     }
-                }
-
-                // Slider
-                if (frames.size > 1) {
-                    Slider(
-                        value = currentIndex.toFloat(),
-                        onValueChange = { onIndexChange(it.toInt()) },
-                        valueRange = 0f..(frames.size - 1).toFloat(),
-                        steps = frames.size - 2,
-                        colors = SliderDefaults.colors(
-                            thumbColor = Color(0xFF0284C7),
-                            activeTrackColor = Color(0xFF0284C7)
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
 
                 // Controls
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    IconButton(onClick = { onStep(false) }, enabled = frames.isNotEmpty()) {
-                        Icon(Icons.Rounded.FastRewind, contentDescription = "Step Back")
-                    }
-
-                    Button(
-                        onClick = onTogglePlay,
-                        enabled = frames.isNotEmpty(),
-                        shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isPlaying) Color(0xFFF97316) else Color(0xFF0284C7)
-                        ),
-                        modifier = Modifier.size(50.dp),
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = if (isPlaying) "Pauză" else "Redă",
-                            tint = Color.White
+                    // Slider
+                    if (frames.size > 1) {
+                        Slider(
+                            value = currentIndex.toFloat(),
+                            onValueChange = { onIndexChange(it.toInt()) },
+                            valueRange = 0f..(frames.size - 1).toFloat(),
+                            steps = frames.size - 2,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF0284C7),
+                                activeTrackColor = Color(0xFF0284C7)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
 
-                    IconButton(onClick = { onStep(true) }, enabled = frames.isNotEmpty()) {
-                        Icon(Icons.Rounded.FastForward, contentDescription = "Step Forward")
+                    // Playback Controls
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { onStep(false) }, enabled = frames.isNotEmpty()) {
+                            Icon(Icons.Rounded.FastRewind, contentDescription = "Step Back")
+                        }
+
+                        Button(
+                            onClick = onTogglePlay,
+                            enabled = frames.isNotEmpty(),
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isPlaying) Color(0xFFF97316) else Color(0xFF0284C7)
+                            ),
+                            modifier = Modifier.size(52.dp),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = if (isPlaying) "Pauză" else "Redă",
+                                tint = Color.White
+                            )
+                        }
+
+                        IconButton(onClick = { onStep(true) }, enabled = frames.isNotEmpty()) {
+                            Icon(Icons.Rounded.FastForward, contentDescription = "Step Forward")
+                        }
+                    }
+
+                    // Opacity Slider
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Opacitate:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Slider(
+                            value = opacity,
+                            onValueChange = onOpacityChange,
+                            valueRange = 0.3f..1.0f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF0284C7),
+                                activeTrackColor = Color(0xFF0284C7)
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "${(opacity * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
-
-                // Open-source attribution
-                Text(
-                    text = "Date furnizate prin RainViewer API v2.0 cu acoperire multi-radar europeană sincronizată.",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
         }
+
+        // Attribution
+        Text(
+            text = "Date furnizate prin RainViewer API v2.0 cu acoperire multi-radar europeană sincronizată.",
+            style = MaterialTheme.typography.labelSmall.copy(
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
 // -------------------------------------------------------------------------
-// Sub-View 4: METEOSAT-10 Satellite
+// Sub-View 4: EUMETSAT / MTG Satellite (Sat24 Europe/Romania) & ANM Archive
 // -------------------------------------------------------------------------
 @Composable
-private fun MeteosatSatelliteView(
+private fun EumetsatSatelliteView(
+    eumetsatFrames: List<EumetsatSatelliteFrame>,
+    selectedEumetsatLayerMode: EumetsatLayerMode,
+    currentEumetsatIndex: Int,
+    isEumetsatPlaying: Boolean,
+    isLoadingEumetsat: Boolean,
     channels: List<MeteosatChannelInfo>,
     selectedChannel: MeteosatChannelInfo,
-    frames: List<MeteosatFrame>,
-    selectedFrame: MeteosatFrame?,
-    isLoading: Boolean,
+    meteosatFrames: List<MeteosatFrame>,
+    selectedMeteosatFrame: MeteosatFrame?,
+    isLoadingMeteosat: Boolean,
+    onSelectEumetsatLayer: (EumetsatLayerMode) -> Unit,
+    onSelectEumetsatIndex: (Int) -> Unit,
+    onToggleEumetsatPlay: () -> Unit,
+    onStepEumetsat: (Boolean) -> Unit,
     onSelectChannel: (MeteosatChannelInfo) -> Unit,
-    onSelectFrame: (MeteosatFrame) -> Unit,
+    onSelectMeteosatFrame: (MeteosatFrame) -> Unit,
     onOpenFullScreen: (String, String) -> Unit,
     onOpenWeb: () -> Unit,
     lang: AppLanguage,
     modifier: Modifier = Modifier
 ) {
+    val currentFrame = eumetsatFrames.getOrNull(currentEumetsatIndex)
+    var isAnmArchiveExpanded by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Channel Selector Chips
-        Text(
-            text = Translations.get("satellite_channels", lang) + ":",
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-        )
+        // Satellite Layer Mode Chips (Visible, Infrared, Night Microphysics, MTG)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                text = "Mod Satelit EUMETSAT / MTG (România):",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+            )
 
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(horizontal = 2.dp)
-        ) {
-            items(channels) { channel ->
-                val isSelected = channel.tipNumber == selectedChannel.tipNumber
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { onSelectChannel(channel) },
-                    label = {
-                        Text(
-                            text = channel.titleRo,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            maxLines = 1
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(horizontal = 2.dp)
+            ) {
+                items(EumetsatLayerMode.entries.toList()) { mode ->
+                    val isSelected = mode == selectedEumetsatLayerMode
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onSelectEumetsatLayer(mode) },
+                        label = {
+                            Text(
+                                text = when (mode) {
+                                    EumetsatLayerMode.VISIBLE -> "☀️ Vizibil (HRV / Zi)"
+                                    EumetsatLayerMode.INFRARED -> "🌡️ Infra-Roșu (IR)"
+                                    EumetsatLayerMode.NIGHT_MICROPHYSICS -> "🌙 Night Microphysics"
+                                    EumetsatLayerMode.MTG -> "🛰️ MTG Multispectral"
+                                },
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                maxLines = 1
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF0D9488),
+                            selectedLabelColor = Color.White
                         )
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = Color(0xFF0D9488),
-                        selectedLabelColor = Color.White
                     )
-                )
+                }
             }
         }
 
-        // Channel Spec & Description Card
+        // Layer Description Banner Card
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
@@ -1476,7 +1249,7 @@ private fun MeteosatSatelliteView(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = selectedChannel.titleRo,
+                        text = selectedEumetsatLayerMode.titleRo,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                     )
                     Surface(
@@ -1484,7 +1257,7 @@ private fun MeteosatSatelliteView(
                         color = Color(0xFF0D9488).copy(alpha = 0.2f)
                     ) {
                         Text(
-                            text = "Rezoluție: ${selectedChannel.resolution}",
+                            text = "LIVE • EUMETSAT",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF0D9488)
@@ -1495,23 +1268,15 @@ private fun MeteosatSatelliteView(
                 }
 
                 Text(
-                    text = selectedChannel.descriptionRo,
+                    text = selectedEumetsatLayerMode.descriptionRo,
                     style = MaterialTheme.typography.bodySmall.copy(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                )
-
-                Text(
-                    text = "Bandă spectrală: ${selectedChannel.spectrum}",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
                     )
                 )
             }
         }
 
-        // Satellite Image Display Card
+        // Main Satellite Image Display Card
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1527,10 +1292,10 @@ private fun MeteosatSatelliteView(
                         .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (selectedFrame != null) {
+                    if (currentFrame != null) {
                         SubcomposeAsyncImage(
-                            model = selectedFrame.imageUrl,
-                            contentDescription = "Meteosat Frame",
+                            model = currentFrame.imageUrl,
+                            contentDescription = "Imagine Satelit Eumetsat",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier.fillMaxSize(),
                             loading = {
@@ -1540,29 +1305,47 @@ private fun MeteosatSatelliteView(
                             }
                         )
 
-                        // Top UTC Time badge
+                        // Top Floating Frame Timestamp Badge
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = Color.Black.copy(alpha = 0.7f),
+                            color = Color.Black.copy(alpha = 0.75f),
                             modifier = Modifier
                                 .align(Alignment.TopStart)
                                 .padding(12.dp)
                         ) {
-                            Text(
-                                text = selectedFrame.timeUtc,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isEumetsatPlaying) Color(0xFF10B981) else Color(0xFFEAB308))
+                                )
+                                Text(
+                                    text = "${currentFrame.formattedTime} • ${currentFrame.timeUtc}",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                                if (eumetsatFrames.isNotEmpty()) {
+                                    Text(
+                                        text = "(${currentEumetsatIndex + 1}/${eumetsatFrames.size})",
+                                        color = Color.White.copy(alpha = 0.75f),
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
                         }
 
-                        // Top Zoom Button
+                        // Top Zoom / Full Screen Button
                         IconButton(
                             onClick = {
                                 onOpenFullScreen(
-                                    selectedFrame.imageUrl,
-                                    "${selectedChannel.titleRo} - ${selectedFrame.timeUtc}"
+                                    currentFrame.imageUrl,
+                                    "${selectedEumetsatLayerMode.titleRo} - ${currentFrame.formattedTime}"
                                 )
                             },
                             modifier = Modifier
@@ -1578,28 +1361,124 @@ private fun MeteosatSatelliteView(
                                 modifier = Modifier.size(18.dp)
                             )
                         }
-                    } else if (isLoading) {
+                    } else if (isLoadingEumetsat) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             CircularProgressIndicator(color = Color(0xFF2DD4BF))
                             Text(
-                                text = "Se descarcă datele METEOSAT-10…",
+                                text = "Se descarcă imaginile satelitare EUMETSAT…",
                                 color = Color.White,
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
                     } else {
                         Text(
-                            text = "Nicio imagine disponibilă",
+                            text = "Nicio imagine satelitară disponibilă",
                             color = Color.White,
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
 
-                // Available Observation Hours Row
+                // Satellite Player Controls (Scrubber & Buttons)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (eumetsatFrames.size > 1) {
+                        Slider(
+                            value = currentEumetsatIndex.toFloat(),
+                            onValueChange = { onSelectEumetsatIndex(it.toInt()) },
+                            valueRange = 0f..(eumetsatFrames.size - 1).toFloat(),
+                            steps = eumetsatFrames.size - 2,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF0D9488),
+                                activeTrackColor = Color(0xFF0D9488)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    // Player Buttons Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { onStepEumetsat(false) },
+                            enabled = eumetsatFrames.isNotEmpty()
+                        ) {
+                            Icon(Icons.Rounded.FastRewind, contentDescription = "Cadru anterior")
+                        }
+
+                        Button(
+                            onClick = onToggleEumetsatPlay,
+                            enabled = eumetsatFrames.isNotEmpty(),
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isEumetsatPlaying) Color(0xFFF97316) else Color(0xFF0D9488)
+                            ),
+                            modifier = Modifier.size(54.dp),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isEumetsatPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = if (isEumetsatPlaying) "Pauză" else "Redă",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { onStepEumetsat(true) },
+                            enabled = eumetsatFrames.isNotEmpty()
+                        ) {
+                            Icon(Icons.Rounded.FastForward, contentDescription = "Cadru următor")
+                        }
+                    }
+
+                    // Quick Jump Frame Hours Row
+                    if (eumetsatFrames.isNotEmpty()) {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            contentPadding = PaddingValues(horizontal = 2.dp)
+                        ) {
+                            items(eumetsatFrames.mapIndexed { idx, frame -> idx to frame }) { (idx, frame) ->
+                                val isSelected = idx == currentEumetsatIndex
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isSelected) Color(0xFF0D9488) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.clickable { onSelectEumetsatIndex(idx) }
+                                ) {
+                                    Text(
+                                        text = frame.formattedTime,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                        ),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Night Microphysics Interpretation & Color Legend
+        if (selectedEumetsatLayerMode == EumetsatLayerMode.NIGHT_MICROPHYSICS) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1607,30 +1486,161 @@ private fun MeteosatSatelliteView(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = Translations.get("satellite_time", lang) + ":",
+                        text = "Ghid Interpretare Culori (Night Microphysics RGB):",
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
                     )
 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFEAB308))
+                        )
+                        Text(
+                            text = "Galben / Verde-deschis: Nori joși și ceață densă de noapte (stratus)",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF65A30D))
+                        )
+                        Text(
+                            text = "Verde / Kaki: Nori de altitudine medie (altocumulus)",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFDC2626))
+                        )
+                        Text(
+                            text = "Roșu / Purpuriu: Nori înalți de gheață (cirrus, vârful furtunilor)",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF1E3A8A))
+                        )
+                        Text(
+                            text = "Albastru închis / Negru: Sol senin fără acoperire noroasă",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        }
+
+        // Classical ANM Meteosat-10 Channels Expander
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isAnmArchiveExpanded = !isAnmArchiveExpanded },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Layers,
+                            contentDescription = null,
+                            tint = Color(0xFF0D9488),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Arhivă Canale ANM Meteosat-10 (Canal 1 - 7)",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+
+                    Text(
+                        text = if (isAnmArchiveExpanded) "Ascunde ▲" else "Arată ▼",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = Color(0xFF0D9488),
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
+
+                if (isAnmArchiveExpanded) {
                     LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(horizontal = 2.dp)
                     ) {
-                        items(frames) { frame ->
-                            val isSelected = frame.imageUrl == selectedFrame?.imageUrl
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isSelected) Color(0xFF0D9488) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                modifier = Modifier.clickable { onSelectFrame(frame) }
-                            ) {
-                                Text(
-                                    text = frame.formattedTime,
-                                    style = MaterialTheme.typography.labelSmall.copy(
+                        items(channels) { channel ->
+                            val isSelected = channel.tipNumber == selectedChannel.tipNumber
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { onSelectChannel(channel) },
+                                label = {
+                                    Text(
+                                        text = channel.titleRo,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                                    ),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                                )
-                            }
+                                        maxLines = 1
+                                    )
+                                }
+                            )
+                        }
+                    }
+
+                    if (selectedMeteosatFrame != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1.3f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.Black)
+                        ) {
+                            SubcomposeAsyncImage(
+                                model = selectedMeteosatFrame.imageUrl,
+                                contentDescription = "ANM Meteosat Frame",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
                     }
                 }
@@ -1645,7 +1655,7 @@ private fun MeteosatSatelliteView(
         ) {
             Icon(Icons.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Vezi Galeria METEOSAT pe meteoromania.ro")
+            Text("Vezi Satelit Live Sat24 România")
         }
     }
 }
@@ -1671,7 +1681,7 @@ private fun RadarDbzLegendCard(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "${Translations.get("radar_legend", lang)} (Scară Intensitate Precipitații):",
+                text = "${Translations.get("radar_legend", lang)} (Scară Intensitate Precipitații dBZ):",
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
             )
 
@@ -1773,7 +1783,7 @@ private fun SpecMetricBox(
 }
 
 // -------------------------------------------------------------------------
-// Full-Screen Pinch-to-Zoom Dialog
+// Full-Screen Pinch-to-Zoom Dialog for Meteosat
 // -------------------------------------------------------------------------
 @Composable
 private fun RadarInteractiveZoomDialog(

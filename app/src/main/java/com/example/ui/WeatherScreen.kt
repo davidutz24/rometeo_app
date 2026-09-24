@@ -1,5 +1,10 @@
 package com.example.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -39,11 +44,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.model.AppLanguage
 import com.example.model.AppNavTab
@@ -84,11 +91,13 @@ fun WeatherScreen(
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     val isSearching by viewModel.isSearching.collectAsStateWithLifecycle()
+    val isLocatingGps by viewModel.isLocatingGps.collectAsStateWithLifecycle()
     val currentNavTab by viewModel.currentNavTab.collectAsStateWithLifecycle()
     val generalWarnings by viewModel.generalWarnings.collectAsStateWithLifecycle()
     val nowcastingWarnings by viewModel.nowcastingWarnings.collectAsStateWithLifecycle()
     val isLoadingAnm by viewModel.isLoadingAnm.collectAsStateWithLifecycle()
 
+    val context = LocalContext.current
     val totalActiveWarnings = generalWarnings.size + nowcastingWarnings.size
 
     val systemDark = isSystemInDarkTheme()
@@ -101,6 +110,62 @@ fun WeatherScreen(
     var showLocationSearch by remember { mutableStateOf(false) }
     var showModelInfoFor by remember { mutableStateOf<WeatherModel?>(null) }
     var showAppInfoDialog by remember { mutableStateOf(false) }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (fineGranted || coarseGranted) {
+            viewModel.requestGpsLocation(
+                onSuccess = { showLocationSearch = false },
+                onError = {
+                    Toast.makeText(
+                        context,
+                        Translations.get("gps_error", language),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            )
+        } else {
+            Toast.makeText(
+                context,
+                Translations.get("gps_permission_denied", language),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    val onTriggerGps: () -> Unit = {
+        val fine = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarse = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (fine || coarse) {
+            viewModel.requestGpsLocation(
+                onSuccess = { showLocationSearch = false },
+                onError = {
+                    Toast.makeText(
+                        context,
+                        Translations.get("gps_error", language),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            )
+        } else {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
 
     // Current weather condition for animated background
     val conditionType = when (val state = forecastState) {
@@ -123,7 +188,9 @@ fun WeatherScreen(
                         location = currentLocation,
                         language = language,
                         themeMode = themeMode,
+                        isLocatingGps = isLocatingGps,
                         onLocationClick = { showLocationSearch = true },
+                        onGpsClick = onTriggerGps,
                         onLanguageSelect = { viewModel.setLanguage(it) },
                         onThemeToggle = {
                             val nextMode = when (themeMode) {
@@ -306,10 +373,12 @@ fun WeatherScreen(
             currentLocation = currentLocation,
             searchResults = searchResults,
             isSearching = isSearching,
+            isLocatingGps = isLocatingGps,
             onQueryChanged = { viewModel.onSearchQueryChanged(it) },
             onSelectLocation = { viewModel.selectLocation(it) },
             onSaveLocation = { viewModel.addLocationToSaved(it) },
             onDeleteLocation = { viewModel.deleteLocation(it) },
+            onGpsClick = onTriggerGps,
             onDismiss = { showLocationSearch = false },
             lang = language
         )
@@ -350,19 +419,20 @@ private fun ForecastContent(
         contentPadding = PaddingValues(top = 10.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        if (selectedCategory == ForecastCategory.SHORT_TERM) {
-            // SHORT-TERM: Front page layout with current weather hero + hourly forecast + model comparison + days forecast
-            item(key = "current_card") {
-                CurrentWeatherCard(
-                    current = data.current,
-                    model = selectedModel,
-                    isOfflineCache = data.isOfflineCache,
-                    cachedAtTimestamp = data.fetchedAtTimestamp,
-                    lang = lang,
-                    onRefresh = onRefresh
-                )
-            }
+        // 1. Model în direct
+        item(key = "current_card") {
+            CurrentWeatherCard(
+                current = data.current,
+                model = selectedModel,
+                isOfflineCache = data.isOfflineCache,
+                cachedAtTimestamp = data.fetchedAtTimestamp,
+                lang = lang,
+                onRefresh = onRefresh
+            )
+        }
 
+        // 2. Prognoza orară (fără ore din trecut)
+        if (data.hourly.isNotEmpty()) {
             item(key = "hourly_chart") {
                 HourlyForecastChart(
                     hourly = data.hourly,
@@ -370,33 +440,27 @@ private fun ForecastContent(
                     lang = lang
                 )
             }
+        }
 
+        // 3. Prognoza pe mai multe zile (2, 3, 5, 15, 16, 35 sau 46 zile)
+        item(key = "daily_forecast") {
+            DailyForecastList(
+                daily = data.daily,
+                extendedDaily = data.extendedDaily,
+                hourly = data.hourly,
+                model = selectedModel,
+                category = selectedCategory,
+                lang = lang
+            )
+        }
+
+        // 4. Comparația multi-model (la final)
+        if (data.comparison.isNotEmpty()) {
             item(key = "model_comparison") {
                 ModelComparisonSection(
                     comparisonHours = data.comparison,
                     selectedModel = selectedModel,
                     onSelectModel = onSelectModel,
-                    lang = lang
-                )
-            }
-
-            item(key = "daily_forecast_short") {
-                DailyForecastList(
-                    daily = data.daily,
-                    extendedDaily = data.extendedDaily,
-                    model = selectedModel,
-                    category = selectedCategory,
-                    lang = lang
-                )
-            }
-        } else {
-            // MEDIUM-TERM & LONG-TERM: Only the days forecast with detailed meteorological information in list-mode
-            item(key = "daily_forecast_standalone") {
-                DailyForecastList(
-                    daily = data.daily,
-                    extendedDaily = data.extendedDaily,
-                    model = selectedModel,
-                    category = selectedCategory,
                     lang = lang
                 )
             }

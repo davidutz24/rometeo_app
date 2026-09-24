@@ -26,6 +26,7 @@ import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 class WeatherRepository(
     private val database: AppDatabase
@@ -79,16 +80,67 @@ class WeatherRepository(
         try {
             val (forecast, comparison) = withContext(Dispatchers.IO) {
                 val forecastDeferred = when (model) {
-                    WeatherModel.WEATHERNEXT_3_SHORT -> {
-                        val url = "https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${location.latitude}&longitude=${location.longitude}&models=google_weathernext2_ensemble&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,surface_pressure_mean,wind_direction_10m_dominant&forecast_days=3&timezone=auto"
+                    WeatherModel.WEATHERNEXT_3,
+                    WeatherModel.WEATHERNEXT_3_5KM,
+                    WeatherModel.WEATHERNEXT_3_10KM,
+                    WeatherModel.WEATHERNEXT_3_25KM -> {
+                        val url = "https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${location.latitude}&longitude=${location.longitude}&models=google_weathernext2_ensemble&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,is_day&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,surface_pressure_mean,wind_direction_10m_dominant&forecast_days=15&timezone=auto"
                         api.getCustomUrlForecast(url)
                     }
-                    WeatherModel.WEATHERNEXT_3_MEDIUM -> {
-                        val url = "https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${location.latitude}&longitude=${location.longitude}&models=google_weathernext2_ensemble&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,surface_pressure_mean,wind_direction_10m_dominant&forecast_days=15&timezone=auto"
-                        api.getCustomUrlForecast(url)
+                    WeatherModel.ICON_EU_FLASH -> {
+                        api.getModelForecast(
+                            latitude = location.latitude,
+                            longitude = location.longitude,
+                            model = "icon_eu",
+                            forecastDays = 2
+                        )
+                    }
+                    WeatherModel.ICON_EU -> {
+                        api.getModelForecast(
+                            latitude = location.latitude,
+                            longitude = location.longitude,
+                            model = "icon_eu",
+                            forecastDays = 5
+                        )
+                    }
+                    WeatherModel.ECMWF_IFS -> {
+                        api.getModelForecast(
+                            latitude = location.latitude,
+                            longitude = location.longitude,
+                            model = "ecmwf_ifs025",
+                            forecastDays = 15
+                        )
+                    }
+                    WeatherModel.ECMWF_AIFS -> {
+                        api.getModelForecast(
+                            latitude = location.latitude,
+                            longitude = location.longitude,
+                            model = "ecmwf_aifs025_single",
+                            forecastDays = 15
+                        )
                     }
                     WeatherModel.ECMWF_EXTENDED -> {
-                        val url = "https://seasonal-api.open-meteo.com/v1/seasonal?latitude=${location.latitude}&longitude=${location.longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,surface_pressure_mean&hourly=temperature_2m,precipitation,weather_code,wind_speed_10m&forecast_days=46&timezone=auto"
+                        val url = "https://seasonal-api.open-meteo.com/v1/seasonal?latitude=${location.latitude}&longitude=${location.longitude}&models=ecmwf_ec46&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,surface_pressure_mean&hourly=temperature_2m,precipitation,weather_code,wind_speed_10m&forecast_days=46&timezone=auto"
+                        api.getCustomUrlForecast(url)
+                    }
+                    WeatherModel.SEAS5 -> {
+                        val url = "https://seasonal-api.open-meteo.com/v1/seasonal?latitude=${location.latitude}&longitude=${location.longitude}&models=ecmwf_seas5&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,surface_pressure_mean&hourly=temperature_2m,precipitation,weather_code,wind_speed_10m&forecast_days=46&timezone=auto"
+                        api.getCustomUrlForecast(url)
+                    }
+                    WeatherModel.CFSV2 -> {
+                        val url = "https://seasonal-api.open-meteo.com/v1/seasonal?latitude=${location.latitude}&longitude=${location.longitude}&models=gfs_seamless&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,surface_pressure_mean&hourly=temperature_2m,precipitation,weather_code,wind_speed_10m&forecast_days=46&timezone=auto"
+                        api.getCustomUrlForecast(url)
+                    }
+                    WeatherModel.GFS -> {
+                        api.getModelForecast(
+                            latitude = location.latitude,
+                            longitude = location.longitude,
+                            model = "gfs_global",
+                            forecastDays = 16
+                        )
+                    }
+                    WeatherModel.GEFS -> {
+                        val url = "https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${location.latitude}&longitude=${location.longitude}&models=gfs_seamless&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,is_day&hourly=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,surface_pressure_mean&forecast_days=35&timezone=auto"
                         api.getCustomUrlForecast(url)
                     }
                     else -> {
@@ -96,7 +148,7 @@ class WeatherRepository(
                             latitude = location.latitude,
                             longitude = location.longitude,
                             model = model.apiKey,
-                            forecastDays = if (model == WeatherModel.ICON_EU_FLASH) 3 else 7
+                            forecastDays = 7
                         )
                     }
                 }
@@ -156,7 +208,7 @@ class WeatherRepository(
     }
 
     private suspend fun fetchMultiModelComparison(lat: Double, lon: Double): List<ModelComparisonHour> {
-        val modelsParam = "ecmwf_ifs025,ecmwf_aifs025,icon_global,icon_eu,meteofrance_arpege_europe,gfs_global"
+        val modelsParam = "ecmwf_ifs025,ecmwf_aifs025_single,icon_global,icon_eu,meteofrance_arpege_europe,gfs_global"
         val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&hourly=temperature_2m,precipitation&models=$modelsParam&forecast_days=3"
         val responseBody = api.getRawMultiModel(url)
         val jsonString = responseBody.string()
@@ -164,27 +216,40 @@ class WeatherRepository(
         val hourly = root.optJSONObject("hourly") ?: return emptyList()
 
         val timeArray = hourly.optJSONArray("time") ?: return emptyList()
-        val count = minOf(timeArray.length(), 48) // next 48 hours
-        val result = mutableListOf<ModelComparisonHour>()
-
         val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US)
         val hourFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
+        val nowMs = System.currentTimeMillis()
+        var curCompIndex = 0
+        for (i in 0 until timeArray.length()) {
+            val iso = timeArray.optString(i)
+            val d = try { isoFormat.parse(iso)?.time } catch (_: Exception) { null }
+            if (d != null && d + 3600_000L > nowMs) {
+                curCompIndex = i
+                break
+            }
+        }
+
+        val startComp = maxOf(0, curCompIndex)
+        val count = minOf(timeArray.length() - startComp, 36) // next 36 hours from current
+        val result = mutableListOf<ModelComparisonHour>()
+
         val tempIFS = hourly.optJSONArray("temperature_2m_ecmwf_ifs025")
-        val tempAIFS = hourly.optJSONArray("temperature_2m_ecmwf_aifs025")
+        val tempAIFS = hourly.optJSONArray("temperature_2m_ecmwf_aifs025_single") ?: hourly.optJSONArray("temperature_2m_ecmwf_aifs025")
         val tempICON = hourly.optJSONArray("temperature_2m_icon_global")
         val tempICONEU = hourly.optJSONArray("temperature_2m_icon_eu")
         val tempARPEGE = hourly.optJSONArray("temperature_2m_meteofrance_arpege_europe")
         val tempGFS = hourly.optJSONArray("temperature_2m_gfs_global")
 
         val precipIFS = hourly.optJSONArray("precipitation_ecmwf_ifs025")
-        val precipAIFS = hourly.optJSONArray("precipitation_ecmwf_aifs025")
+        val precipAIFS = hourly.optJSONArray("precipitation_ecmwf_aifs025_single") ?: hourly.optJSONArray("precipitation_ecmwf_aifs025")
         val precipICON = hourly.optJSONArray("precipitation_icon_global")
         val precipICONEU = hourly.optJSONArray("precipitation_icon_eu")
         val precipARPEGE = hourly.optJSONArray("precipitation_meteofrance_arpege_europe")
         val precipGFS = hourly.optJSONArray("precipitation_gfs_global")
 
-        for (i in 0 until count) {
+        for (idx in 0 until count) {
+            val i = startComp + idx
             val iso = timeArray.optString(i)
             val displayHour = try {
                 val date = isoFormat.parse(iso)
@@ -194,14 +259,14 @@ class WeatherRepository(
             }
 
             val values = listOf(
-                ModelForecastValue(WeatherModel.WEATHERNEXT_3_SHORT, tempAIFS?.optDouble(i)?.takeIf { !it.isNaN() } ?: tempIFS?.optDouble(i)?.takeIf { !it.isNaN() }, precipAIFS?.optDouble(i)),
+                ModelForecastValue(WeatherModel.ICON_EU_FLASH, tempICONEU?.optDouble(i)?.takeIf { !it.isNaN() }, precipICONEU?.optDouble(i)),
+                ModelForecastValue(WeatherModel.WEATHERNEXT_3, tempAIFS?.optDouble(i)?.takeIf { !it.isNaN() } ?: tempIFS?.optDouble(i)?.takeIf { !it.isNaN() }, precipAIFS?.optDouble(i)),
+                ModelForecastValue(WeatherModel.ICON_EU, tempICONEU?.optDouble(i)?.takeIf { !it.isNaN() }, precipICONEU?.optDouble(i)),
                 ModelForecastValue(WeatherModel.ECMWF_IFS, tempIFS?.optDouble(i)?.takeIf { !it.isNaN() }, precipIFS?.optDouble(i)),
                 ModelForecastValue(WeatherModel.ECMWF_AIFS, tempAIFS?.optDouble(i)?.takeIf { !it.isNaN() }, precipAIFS?.optDouble(i)),
+                ModelForecastValue(WeatherModel.GFS, tempGFS?.optDouble(i)?.takeIf { !it.isNaN() }, precipGFS?.optDouble(i)),
                 ModelForecastValue(WeatherModel.ICON, tempICON?.optDouble(i)?.takeIf { !it.isNaN() }, precipICON?.optDouble(i)),
-                ModelForecastValue(WeatherModel.ICON_EU, tempICONEU?.optDouble(i)?.takeIf { !it.isNaN() }, precipICONEU?.optDouble(i)),
-                ModelForecastValue(WeatherModel.ICON_EU_FLASH, tempICONEU?.optDouble(i)?.takeIf { !it.isNaN() }, precipICONEU?.optDouble(i)),
-                ModelForecastValue(WeatherModel.ARPEGE, tempARPEGE?.optDouble(i)?.takeIf { !it.isNaN() }, precipARPEGE?.optDouble(i)),
-                ModelForecastValue(WeatherModel.GFS, tempGFS?.optDouble(i)?.takeIf { !it.isNaN() }, precipGFS?.optDouble(i))
+                ModelForecastValue(WeatherModel.ARPEGE, tempARPEGE?.optDouble(i)?.takeIf { !it.isNaN() }, precipARPEGE?.optDouble(i))
             )
 
             result.add(ModelComparisonHour(timeIso = iso, displayHour = displayHour, values = values))
@@ -221,39 +286,114 @@ class WeatherRepository(
         val hourlyDto = dto.hourly
         val dailyDto = dto.daily
 
-        val isDay = currentDto?.isDay == 1 || (currentDto?.isDay == null && true)
-        val curWeatherCode = currentDto?.weatherCode ?: hourlyDto?.weatherCode?.firstOrNull() ?: 0
+        val timeList = hourlyDto?.time ?: emptyList()
+        val locTz = dto.timezone?.let {
+            try {
+                TimeZone.getTimeZone(it)
+            } catch (_: Exception) {
+                null
+            }
+        } ?: TimeZone.getDefault()
+
+        val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US).apply {
+            timeZone = locTz
+        }
+        val hourFormat = SimpleDateFormat("HH:mm", Locale.getDefault()).apply {
+            timeZone = locTz
+        }
+
+        // Find the index in hourly forecast that matches the current ongoing hour
+        val nowMs = System.currentTimeMillis()
+        var currentHourIndex = 0
+        for (idx in 0 until timeList.size) {
+            val t = try { isoFormat.parse(timeList[idx])?.time } catch (_: Exception) { null }
+            if (t != null && t + 3600_000L > nowMs) {
+                currentHourIndex = idx
+                break
+            }
+        }
+
+        // Determine if it is day time
+        val isDay = currentDto?.isDay == 1 || (currentDto?.isDay == null && run {
+            val hourInt = try {
+                timeList.getOrNull(currentHourIndex)?.substringAfter('T')?.take(2)?.toInt() ?: 12
+            } catch (_: Exception) { 12 }
+            hourInt in 6..20
+        })
+
+        // Current precipitation (from current block or hourly at current hour)
+        val hourlyPrecipAtCur = hourlyDto?.precipitation?.getOrNull(currentHourIndex) ?: 0.0
+        val currentPrecip = currentDto?.precipitation ?: hourlyPrecipAtCur
+
+        // Current weather code:
+        // Priority 1: currentDto.weatherCode if non-null
+        // Priority 2: hourlyDto weather code at current hour (NOT firstOrNull which was midnight!)
+        val rawWeatherCode = currentDto?.weatherCode 
+            ?: hourlyDto?.weatherCode?.getOrNull(currentHourIndex) 
+            ?: 0
+
+        // If the model reports clear/sunny (0 or 1) but precipitation is > 0 mm (e.g. raining/drizzling),
+        // adjust code so the UI accurately represents the rain condition:
+        val curWeatherCode = if (rawWeatherCode <= 1 && currentPrecip > 0.0) {
+            when {
+                currentPrecip >= 2.5 -> 65 // Heavy rain
+                currentPrecip >= 0.5 -> 61 // Rain
+                else -> 51 // Drizzle
+            }
+        } else {
+            rawWeatherCode
+        }
+
         val condition = WeatherCondition.fromWmoCode(curWeatherCode, isDay)
 
+        val curTemp = currentDto?.temperature2m ?: hourlyDto?.temperature2m?.getOrNull(currentHourIndex) ?: 20.0
+        val curHumidity = currentDto?.relativeHumidity2m?.toInt() 
+            ?: hourlyDto?.relativeHumidity2m?.getOrNull(currentHourIndex)?.toInt() 
+            ?: (if (currentPrecip > 0.0) 85 else 60)
+        val curWind = currentDto?.windSpeed10m ?: hourlyDto?.windSpeed10m?.getOrNull(currentHourIndex) ?: 10.0
+        val curWindDir = currentDto?.windDirection10m?.toInt() ?: hourlyDto?.windDirection10m?.getOrNull(currentHourIndex)?.toInt() ?: 0
+        val curPressure = currentDto?.surfacePressure ?: hourlyDto?.surfacePressure?.getOrNull(currentHourIndex) ?: 1013.25
+        val curApparent = currentDto?.apparentTemperature ?: (curTemp - (if (curWind > 15.0) 1.5 else 0.0))
+
         val current = CurrentWeather(
-            time = currentDto?.time ?: SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date()),
-            temperature = currentDto?.temperature2m ?: hourlyDto?.temperature2m?.firstOrNull() ?: 20.0,
-            apparentTemperature = currentDto?.apparentTemperature ?: currentDto?.temperature2m ?: 20.0,
-            relativeHumidity = currentDto?.relativeHumidity2m?.toInt() ?: hourlyDto?.relativeHumidity2m?.firstOrNull()?.toInt() ?: 50,
-            precipitation = currentDto?.precipitation ?: 0.0,
+            time = currentDto?.time ?: (timeList.getOrNull(currentHourIndex) ?: SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())),
+            temperature = curTemp,
+            apparentTemperature = curApparent,
+            relativeHumidity = curHumidity,
+            precipitation = currentPrecip,
             weatherCondition = condition,
-            windSpeed = currentDto?.windSpeed10m ?: 10.0,
-            windDirection = currentDto?.windDirection10m?.toInt() ?: 0,
-            surfacePressure = currentDto?.surfacePressure ?: 1013.25,
+            windSpeed = curWind,
+            windDirection = curWindDir,
+            surfacePressure = curPressure,
             isDay = isDay
         )
 
-        // Hourly
+        // Hourly: strictly start from current ongoing hour, never past hours!
         val hourlyList = mutableListOf<HourlyPoint>()
-        val timeList = hourlyDto?.time ?: emptyList()
-        val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US)
-        val hourFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val startIndex = currentHourIndex
+        val count = minOf(36, timeList.size - startIndex)
 
-        val maxHours = minOf(timeList.size, 36) // next 36 hours
-        for (i in 0 until maxHours) {
+        for (idx in 0 until count) {
+            val i = startIndex + idx
             val iso = timeList[i]
-            val displayHour = try {
+            val displayHour = if (idx == 0) "Acum" else try {
                 val d = isoFormat.parse(iso)
                 if (d != null) hourFormat.format(d) else iso.takeLast(5)
             } catch (e: Exception) {
                 iso.takeLast(5)
             }
-            val code = hourlyDto?.weatherCode?.getOrNull(i) ?: 0
+            val rawCode = hourlyDto?.weatherCode?.getOrNull(i) ?: 0
+            val precipHour = hourlyDto?.precipitation?.getOrNull(i) ?: 0.0
+            val code = if (rawCode <= 1 && precipHour > 0.0) {
+                when {
+                    precipHour >= 2.5 -> 65
+                    precipHour >= 0.5 -> 61
+                    else -> 51
+                }
+            } else {
+                rawCode
+            }
+
             val isDayHour = try {
                 val hourInt = iso.substringAfter('T').take(2).toInt()
                 hourInt in 6..20
@@ -266,8 +406,8 @@ class WeatherRepository(
                     timeIso = iso,
                     displayHour = displayHour,
                     temperature = hourlyDto?.temperature2m?.getOrNull(i) ?: current.temperature,
-                    relativeHumidity = hourlyDto?.relativeHumidity2m?.getOrNull(i)?.toInt() ?: 50,
-                    precipitation = hourlyDto?.precipitation?.getOrNull(i) ?: 0.0,
+                    relativeHumidity = hourlyDto?.relativeHumidity2m?.getOrNull(i)?.toInt() ?: (if (precipHour > 0) 85 else 55),
+                    precipitation = precipHour,
                     weatherCondition = WeatherCondition.fromWmoCode(code, isDayHour),
                     windSpeed = hourlyDto?.windSpeed10m?.getOrNull(i) ?: 0.0,
                     windDirection = hourlyDto?.windDirection10m?.getOrNull(i)?.toInt() ?: 0,
@@ -283,7 +423,21 @@ class WeatherRepository(
         val dayFormatIn = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val dayFormatOut = SimpleDateFormat("EEE d", Locale.getDefault())
 
-        val dayCount = minOf(dayTimes.size, if (model == WeatherModel.ECMWF_EXTENDED) 46 else if (model == WeatherModel.WEATHERNEXT_3_MEDIUM) 15 else 7)
+        val maxDaysForModel = when (model) {
+            WeatherModel.WEATHERNEXT_3,
+            WeatherModel.WEATHERNEXT_3_5KM,
+            WeatherModel.WEATHERNEXT_3_10KM,
+            WeatherModel.WEATHERNEXT_3_25KM -> 15
+            WeatherModel.ICON_EU_FLASH -> 2
+            WeatherModel.ICON_EU -> 5
+            WeatherModel.ECMWF_IFS -> 15
+            WeatherModel.ECMWF_AIFS -> 15
+            WeatherModel.ECMWF_EXTENDED, WeatherModel.SEAS5, WeatherModel.CFSV2 -> 46
+            WeatherModel.GFS -> 16
+            WeatherModel.GEFS -> 35
+            else -> 7
+        }
+        val dayCount = minOf(dayTimes.size, maxDaysForModel)
         for (i in 0 until dayCount) {
             val dIso = dayTimes[i]
             val displayDay = try {
@@ -306,9 +460,7 @@ class WeatherRepository(
                 surfacePressure = pressure,
                 windDirection = windDir
             )
-            if (i < 7) {
-                dailyList.add(point)
-            }
+            dailyList.add(point)
             extendedDailyList.add(point)
         }
 
@@ -431,19 +583,26 @@ class WeatherRepository(
 
             val hArray = org.json.JSONArray(cache.hourlyForecastJson)
             val hourly = mutableListOf<HourlyPoint>()
+            val nowMs = System.currentTimeMillis()
+            val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US)
             for (i in 0 until hArray.length()) {
                 val o = hArray.getJSONObject(i)
+                val isoStr = o.optString("iso")
+                val t = try { isoFormat.parse(isoStr)?.time } catch (_: Exception) { null }
+                if (t != null && t + 3600_000L <= nowMs) {
+                    continue // filter out past hours from cache!
+                }
                 val hCode = o.optInt("code", 0)
                 val isDayHour = try {
-                    val hourInt = o.optString("iso").substringAfter('T').take(2).toInt()
+                    val hourInt = isoStr.substringAfter('T').take(2).toInt()
                     hourInt in 6..20
                 } catch (e: Exception) {
                     true
                 }
                 hourly.add(
                     HourlyPoint(
-                        timeIso = o.optString("iso"),
-                        displayHour = o.optString("displayHour"),
+                        timeIso = isoStr,
+                        displayHour = if (hourly.isEmpty()) "Acum" else o.optString("displayHour"),
                         temperature = o.optDouble("temp", 20.0),
                         relativeHumidity = o.optInt("humidity", 50),
                         precipitation = o.optDouble("precip", 0.0),

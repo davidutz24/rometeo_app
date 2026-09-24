@@ -51,6 +51,7 @@ import com.example.model.AppLanguage
 import com.example.model.HourlyPoint
 import com.example.model.Translations
 import com.example.model.WeatherModel
+import java.text.SimpleDateFormat
 import java.util.Locale
 
 @Composable
@@ -60,7 +61,16 @@ fun HourlyForecastChart(
     lang: AppLanguage,
     modifier: Modifier = Modifier
 ) {
-    if (hourly.isEmpty()) return
+    val nowMs = System.currentTimeMillis()
+    val isoFormat = remember { SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US) }
+    val validHourly = remember(hourly) {
+        hourly.filter { pt ->
+            val t = try { isoFormat.parse(pt.timeIso)?.time } catch (_: Exception) { null }
+            t == null || (t + 3600_000L > nowMs)
+        }
+    }
+
+    if (validHourly.isEmpty()) return
 
     var selectedIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -97,14 +107,19 @@ fun HourlyForecastChart(
                 )
 
                 selectedIndex?.let { idx ->
-                    val item = hourly.getOrNull(idx)
+                    val item = validHourly.getOrNull(idx)
                     if (item != null) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = model.accentColor.copy(alpha = 0.18f)
                         ) {
+                            val hourText = if (item.displayHour.equals("Acum", ignoreCase = true) || item.displayHour.equals("Now", ignoreCase = true)) {
+                                Translations.get("now", lang)
+                            } else {
+                                item.displayHour
+                            }
                             Text(
-                                text = "${item.displayHour} • ${String.format(Locale.getDefault(), "%.1f°C", item.temperature)}",
+                                text = "$hourText • ${String.format(Locale.getDefault(), "%.1f°C", item.temperature)}",
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = model.accentColor
@@ -119,7 +134,7 @@ fun HourlyForecastChart(
             Spacer(modifier = Modifier.height(12.dp))
 
             // Canvas Bezier Graph (Scrollable or 24-hour viewport)
-            val pointsToDraw = hourly.take(24)
+            val pointsToDraw = validHourly.take(24)
             HourlyBezierCanvas(
                 hourly = pointsToDraw,
                 modelColor = model.accentColor,
@@ -134,12 +149,13 @@ fun HourlyForecastChart(
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                itemsIndexed(hourly.take(24)) { index, item ->
+                itemsIndexed(validHourly.take(24)) { index, item ->
                     val isSelected = selectedIndex == index
                     HourlyItemCard(
                         item = item,
                         accentColor = model.accentColor,
                         isSelected = isSelected,
+                        lang = lang,
                         onClick = { selectedIndex = if (isSelected) null else index }
                     )
                 }
@@ -274,6 +290,7 @@ private fun HourlyItemCard(
     item: HourlyPoint,
     accentColor: Color,
     isSelected: Boolean,
+    lang: AppLanguage,
     onClick: () -> Unit
 ) {
     Surface(
@@ -293,8 +310,13 @@ private fun HourlyItemCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            val hourLabel = if (item.displayHour.equals("Acum", ignoreCase = true) || item.displayHour.equals("Now", ignoreCase = true)) {
+                Translations.get("now", lang)
+            } else {
+                item.displayHour
+            }
             Text(
-                text = item.displayHour,
+                text = hourLabel,
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -99,7 +99,24 @@ fun ModelDetailsDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Subtitle Tagline Badge
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = model.accentColor.copy(alpha = 0.14f)
+                ) {
+                    Text(
+                        text = model.subtitleTagline,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            color = model.accentColor
+                        ),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Description in active language
                 Text(
@@ -110,7 +127,46 @@ fun ModelDetailsDialog(
                     )
                 )
 
-                Spacer(modifier = Modifier.height(18.dp))
+                if (model == WeatherModel.WEATHERNEXT_3) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF1E3A8A).copy(alpha = 0.12f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = when (lang) {
+                                    AppLanguage.ROMANIAN -> "Structură Straturi Date (Google DeepMind):"
+                                    AppLanguage.HUNGARIAN -> "Adatrétegek struktúrája (Google DeepMind):"
+                                    AppLanguage.ENGLISH -> "Data Layer Structure (Google DeepMind):"
+                                },
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                            Text(
+                                text = when (lang) {
+                                    AppLanguage.ROMANIAN -> "• 5 km (Station-Head): Strict temperatură 2m & umiditate pe micro-orografie/altitudine (fără radar Doppler terestru).\n• 10 km: Precipitații (ploaie/ninsoare), vânt 10m, radiație solară și grad noros.\n• 25 km: Straturi înalte din atmosferă (ansamblu global 64 membri).\n• Refresh: Nowcasting orar (0–48h) & cicluri principale (până la 15 zile)."
+                                    AppLanguage.HUNGARIAN -> "• 5 km: Kizárólag 2 m-es hőmérséklet és páratartalom domborzati korrekcióval (radar nélkül).\n• 10 km: Csapadék, 10 m-es szél, felhőzet és sugárzás.\n• 25 km: Magaslégköri rétegek (64 tagú szinoptikus együttes).\n• Frissítés: Óránkénti (0–48 óra) és fő futások (15 napig)."
+                                    AppLanguage.ENGLISH -> "• 5 km (Station-Head): Strictly 2m temperature & humidity downscaled for micro-orography (no Doppler radar).\n• 10 km: Gridded precipitation (rain/snow), 10m wind, cloud cover, and solar radiation.\n• 25 km: Upper-air atmospheric layers (64-member global ensemble).\n• Refresh: Hourly nowcasting (0–48h) & main synoptic cycles (up to 15 days)."
+                                },
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Technical Specifications Grid
                 Surface(

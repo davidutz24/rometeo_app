@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Person
@@ -410,76 +411,95 @@ fun AppInfoDialog(
                         title = "Administrația Națională de Meteorologie (ANM)",
                         badge = "România • Oficial",
                         description = when (lang) {
-                            AppLanguage.ROMANIAN -> "Date radar Doppler din Rețeaua Națională Integrată (7 stații operaționale: ORA, BOB, BUC, CRA, MED, BAR, TIM + Mozaic Compozit Național), avertizări meteorologice Nowcasting (Cod Galben/Portocaliu/Roșu), diagnoză climatologică și portal OpenData (HDF5 / OPERA)."
-                            AppLanguage.ENGLISH -> "National Integrated Doppler Radar Network (7 operational stations + Composite Mosaic), official Nowcasting weather warnings, climatology diagnosis, and OpenData portal (HDF5 / OPERA)."
-                            AppLanguage.HUNGARIAN -> "Országos Integrált Doppler radarhálózat (7 állomás + országos kompozit), hivatalos Nowcasting riasztások, klimatológiai termékek és OpenData portál."
+                            AppLanguage.ROMANIAN -> "Date radar Doppler din Rețeaua Națională Integrată (cele 7 stații Doppler operaționale: Bobohalma - BOB, Oradea - ORA, București-Băneasa - BUC, Craiova-Cârcea - CRA, Mediaș - MED, Bârlad - BAR, Timișoara-Urseni - TIM + Mozaic Compozit Național), avertizări meteorologice Nowcasting (Cod Galben/Portocaliu/Roșu) și diagnoză climatologică."
+                            AppLanguage.ENGLISH -> "National Integrated Doppler Radar Network (7 operational Doppler stations: Bobohalma, Oradea, Bucharest, Craiova, Medias, Barlad, Timisoara + National Composite), official Nowcasting weather warnings, and climatology products."
+                            AppLanguage.HUNGARIAN -> "Országos Integrált Doppler radarhálózat (7 operatív állomás + országos kompozit), hivatalos Nowcasting riasztások és klimatológiai termékek."
                         },
-                        url = "https://opendata.meteoromania.ro/radar/",
-                        urlLabel = "opendata.meteoromania.ro/radar/",
+                        url = "https://www.meteoromania.ro/",
+                        urlLabel = "meteoromania.ro",
                         onOpenUrl = { url ->
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             context.startActivity(intent)
                         }
                     )
 
-                    // Source 2: EUMETSAT / METEOSAT
+                    // Source 2: Leaflet.js
+                    SourceDetailItem(
+                        icon = Icons.Rounded.Map,
+                        iconTint = Color(0xFF16A34A),
+                        title = "Leaflet.js",
+                        badge = "© Vladimir Agafonkin • BSD-2-Clause",
+                        description = when (lang) {
+                            AppLanguage.ROMANIAN -> "Motor JavaScript open-source de cartografie interactivă mobilă utilizat pentru vizualizarea hărților, proiecția straturilor radar Doppler georeferențiate (Web Mercator EPSG:3857) și markerele radarelor."
+                            AppLanguage.ENGLISH -> "Open-source JavaScript interactive mapping library used for map rendering, georeferenced Doppler radar layer projection (EPSG:3857), and station interactive markers."
+                            AppLanguage.HUNGARIAN -> "Nyílt forráskódú JavaScript térképészeti könyvtár az interaktív térképek és a georeferált Doppler radarrétegek megjelenítéséhez."
+                        },
+                        url = "https://leafletjs.com/",
+                        urlLabel = "leafletjs.com",
+                        onOpenUrl = { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        }
+                    )
+
+                    // Source 3: CARTO & OpenStreetMap
+                    SourceDetailItem(
+                        icon = Icons.Rounded.Layers,
+                        iconTint = Color(0xFFF59E0B),
+                        title = "CARTO & OpenStreetMap",
+                        badge = "© CARTO • © OpenStreetMap (ODbL)",
+                        description = when (lang) {
+                            AppLanguage.ROMANIAN -> "Straturi cartografice de bază (Voyager & Dark Matter) optimizate pentru relief, granițe, orașe și contrast maxim al ecourilor radar. Date geografice furnizate de contribuitorii OpenStreetMap."
+                            AppLanguage.ENGLISH -> "Basemap tile layers (Voyager & Dark Matter) optimized for terrain, borders, cities, and radar precipitation echo contrast. Geographic data © OpenStreetMap contributors."
+                            AppLanguage.HUNGARIAN -> "Alaptérképek (Voyager & Dark Matter) a domborzati és radarképek megjelenítéséhez. Adatok: © OpenStreetMap közreműködők."
+                        },
+                        url = "https://carto.com/basemaps/",
+                        urlLabel = "carto.com/basemaps",
+                        onOpenUrl = { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        }
+                    )
+
+                    // Source 4: EUMETSAT & Sat24 (Infoplaza)
                     SourceDetailItem(
                         icon = Icons.Rounded.SatelliteAlt,
                         iconTint = Color(0xFF8B5CF6),
-                        title = "EUMETSAT / Meteosat",
-                        badge = "Europa • © EUMETSAT",
+                        title = "EUMETSAT & Sat24 (Infoplaza)",
+                        badge = "© EUMETSAT • © Infoplaza B.V.",
                         description = when (lang) {
-                            AppLanguage.ROMANIAN -> "Imagini satelitare geostaționare multispectrale MSG (Meteosat-10 / Meteosat-11 cu instrumentul SEVIRI: Air Mass RGB, Vizibil 0.6 µm, Infraroșu Termic 10.8 µm, HRV 0.7 µm) și pregătire pentru noua generație MTG (Meteosat Third Generation - FCI / Lightning Imager). Toate drepturile de autor rezervate de EUMETSAT."
-                            AppLanguage.ENGLISH -> "Geostationary multispectral satellite imagery MSG (Meteosat-10/11 SEVIRI: Air Mass RGB, Visible 0.6 µm, Thermal IR 10.8 µm, HRV 0.7 µm) and transition to MTG (Meteosat Third Generation FCI / Lightning Imager). Copyright © EUMETSAT."
-                            AppLanguage.HUNGARIAN -> "Geostacionárius többcsatornás műholdképek MSG (Meteosat-10/11 SEVIRI) és MTG (Meteosat Third Generation FCI). Szerzői jog: © EUMETSAT."
+                            AppLanguage.ROMANIAN -> "Imagini satelitare geostaționare de înaltă rezoluție Meteosat Third Generation (MTG FCI) și MSG (Meteosat-10/11 SEVIRI): Modul Vizibil (HRV / Zi), Modul Infraroșu Termic (IR 10.8 µm), Modul Night Microphysics (identificare nocturnă ceață și nori stratiformi) și compoziție multispectrală live MTG."
+                            AppLanguage.ENGLISH -> "High-resolution geostationary satellite imagery Meteosat Third Generation (MTG FCI) and MSG SEVIRI: Visible (HRV / Day), Thermal Infrared (IR 10.8 µm), Night Microphysics (night fog & cloud separation), and multispectral live MTG. Copyright © EUMETSAT & Infoplaza B.V."
+                            AppLanguage.HUNGARIAN -> "Nagy felbontású geostacionárius műholdképek Meteosat Third Generation (MTG) és MSG: látható (HRV), infravörös (IR) és Night Microphysics módok. Szerzői jog: © EUMETSAT & Infoplaza."
                         },
-                        url = "https://www.eumetsat.int/",
-                        urlLabel = "eumetsat.int",
+                        url = "https://www.sat24.com/",
+                        urlLabel = "sat24.com / eumetsat.int",
                         onOpenUrl = { url ->
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             context.startActivity(intent)
                         }
                     )
 
-                    // Source 3: RainViewer
+                    // Source 5: RainViewer
                     SourceDetailItem(
                         icon = Icons.Rounded.Public,
                         iconTint = Color(0xFF10B981),
-                        title = "RainViewer",
-                        badge = "Global Radar API",
+                        title = "RainViewer Global Radar",
+                        badge = "RainViewer API v2.0",
                         description = when (lang) {
-                            AppLanguage.ROMANIAN -> "Mozaic radar global internațional sincronizat în timp real și model de propagare a averselor prin advecție pe termen scurt (nowcasting 30-120 min)."
-                            AppLanguage.ENGLISH -> "Global multi-country composite radar imagery and short-term advective precipitation nowcasting."
-                            AppLanguage.HUNGARIAN -> "Nemzetközi kompozit radarhálózat és rövid távú csapadék-advekciós nowcasting előrejelzés."
+                            AppLanguage.ROMANIAN -> "Mozaic radar mondial sincronizat la 10 minute și model de prognoză prin advecție pe termen scurt (nowcasting)."
+                            AppLanguage.ENGLISH -> "Global multi-country composite radar tiles updated every 10 minutes with advective precipitation nowcasting."
+                            AppLanguage.HUNGARIAN -> "Nemzetközi kompozit radarhálózat és rövid távú csapadék-advekciós nowcasting."
                         },
-                        url = "https://www.rainviewer.com/",
-                        urlLabel = "rainviewer.com",
+                        url = "https://www.rainviewer.com/api.html",
+                        urlLabel = "rainviewer.com/api.html",
                         onOpenUrl = { url ->
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             context.startActivity(intent)
                         }
                     )
 
-                    // Source 4: OpenStreetMap
-                    SourceDetailItem(
-                        icon = Icons.Rounded.Map,
-                        iconTint = Color(0xFFF59E0B),
-                        title = "OpenStreetMap",
-                        badge = "© OpenStreetMap • ODbL",
-                        description = when (lang) {
-                            AppLanguage.ROMANIAN -> "Hărți de fundal geografice, relief, granițe administrative și date geospațiale. Date furnizate de contribuitorii OpenStreetMap sub licența Open Database License (ODbL)."
-                            AppLanguage.ENGLISH -> "Geographic basemaps, relief, administrative boundaries, and geospatial context provided by OpenStreetMap contributors under the Open Database License (ODbL)."
-                            AppLanguage.HUNGARIAN -> "Földrajzi alaptérképek és közigazgatási határok az OpenStreetMap közreműködőitől (ODbL licenc)."
-                        },
-                        url = "https://www.openstreetmap.org/copyright",
-                        urlLabel = "openstreetmap.org/copyright",
-                        onOpenUrl = { url ->
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                            context.startActivity(intent)
-                        }
-                    )
-
-                    // Source 5: NWP & AI Models
+                    // Source 6: NWP & AI Models
                     SourceDetailItem(
                         icon = Icons.Rounded.Language,
                         iconTint = Color(0xFFEC4899),
