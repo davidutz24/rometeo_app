@@ -68,7 +68,6 @@ import com.example.ui.components.CurrentWeatherCard
 import com.example.ui.components.DailyForecastList
 import com.example.ui.components.HourlyForecastChart
 import com.example.ui.components.LocationSearchDialog
-import com.example.ui.components.ModelComparisonSection
 import com.example.ui.components.ModelDetailsDialog
 import com.example.ui.components.ModelSelectorBar
 import com.example.ui.components.RadarSatelliteScreen
@@ -452,18 +451,6 @@ private fun ForecastContent(
                 category = selectedCategory,
                 lang = lang
             )
-        }
-
-        // 4. Comparația multi-model (la final)
-        if (data.comparison.isNotEmpty()) {
-            item(key = "model_comparison") {
-                ModelComparisonSection(
-                    comparisonHours = data.comparison,
-                    selectedModel = selectedModel,
-                    onSelectModel = onSelectModel,
-                    lang = lang
-                )
-            }
         }
 
         // Bottom spacer to clear navigation bar

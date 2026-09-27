@@ -13,9 +13,9 @@ object Translations {
 
     private val strings: Map<String, Map<AppLanguage, String>> = mapOf(
         "category_forecast" to mapOf(
-            AppLanguage.ENGLISH to "Forecast",
-            AppLanguage.ROMANIAN to "Prognoză",
-            AppLanguage.HUNGARIAN to "Előrejelzés"
+            AppLanguage.ENGLISH to "Short-Medium Term",
+            AppLanguage.ROMANIAN to "Prognoză termen scurt-mediu",
+            AppLanguage.HUNGARIAN to "Rövid- és középtáv"
         ),
         "category_forecast_subtitle" to mapOf(
             AppLanguage.ENGLISH to "0 – 15 Days (Short & Medium-Range Models)",
@@ -23,9 +23,9 @@ object Translations {
             AppLanguage.HUNGARIAN to "0 – 15 nap (Rövid és középtávú modellek)"
         ),
         "category_short_term" to mapOf(
-            AppLanguage.ENGLISH to "Forecast",
-            AppLanguage.ROMANIAN to "Prognoză",
-            AppLanguage.HUNGARIAN to "Előrejelzés"
+            AppLanguage.ENGLISH to "Short-Medium Term",
+            AppLanguage.ROMANIAN to "Prognoză termen scurt-mediu",
+            AppLanguage.HUNGARIAN to "Rövid- és középtáv"
         ),
         "category_medium_term" to mapOf(
             AppLanguage.ENGLISH to "Medium-Term",
@@ -34,7 +34,7 @@ object Translations {
         ),
         "category_long_term" to mapOf(
             AppLanguage.ENGLISH to "Long-Term",
-            AppLanguage.ROMANIAN to "Termen Lung",
+            AppLanguage.ROMANIAN to "Prognoză termen lung",
             AppLanguage.HUNGARIAN to "Hosszú táv"
         ),
         "hourly_breakdown_title" to mapOf(

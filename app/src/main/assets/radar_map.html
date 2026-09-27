@@ -10,7 +10,7 @@
       padding: 0;
       width: 100%;
       height: 100%;
-      background: #0b132b;
+      background: #0f172a;
       overflow: hidden;
       -webkit-user-select: none;
       user-select: none;
@@ -20,35 +20,73 @@
       height: 100%;
       background: #0f172a;
     }
+    .leaflet-container {
+      background: #0f172a !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
     .station-marker {
       background: #0284c7;
       color: #ffffff;
       border: 2px solid #ffffff;
       border-radius: 50%;
-      width: 28px;
-      height: 28px;
-      line-height: 24px;
+      width: 30px;
+      height: 30px;
+      line-height: 26px;
       text-align: center;
       font-size: 11px;
-      font-weight: 700;
-      font-family: sans-serif;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+      font-weight: 800;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.55);
       cursor: pointer;
       transition: transform 0.2s ease, background 0.2s ease;
     }
     .station-marker:hover, .station-marker.active {
       background: #f97316 !important;
-      transform: scale(1.18);
+      transform: scale(1.22);
       border-color: #ffedd5;
+      box-shadow: 0 0 12px rgba(249, 115, 22, 0.8);
+    }
+    .city-label {
+      background: rgba(15, 23, 42, 0.75);
+      color: #e2e8f0;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 4px;
+      padding: 1px 4px;
+      font-size: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
     }
     .radar-ring {
       pointer-events: none;
     }
+    .layer-badge {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      background: rgba(15, 23, 42, 0.78);
+      color: #94a3b8;
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      z-index: 1000;
+      pointer-events: none;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
   </style>
   <script src="leaflet.js"></script>
+  <script>
+    // Robust fallback if local leaflet.js had any issues
+    if (typeof L === 'undefined') {
+      document.write('<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />');
+      document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+    }
+  </script>
 </head>
 <body>
 <div id="map"></div>
+<div id="layer-badge" class="layer-badge">🇷🇴 Radar ANM • Harta Live</div>
+
 <script>
   var map = null;
   var baseTile = null;
@@ -56,72 +94,197 @@
   var rainViewerLayer = null;
   var stationLayerGroup = null;
   var ringsLayerGroup = null;
+  var citiesLayerGroup = null;
   var currentMode = 'anm';
-  var isDark = true;
+  var isDark = false;
+  var currentTileType = 'voyager'; // 'voyager', 'anm', 'dark', 'osm'
+
+  // Exact Mercator bounds for ANM Composite Radar
   var romaniaBounds = [[42.007679, 17.972679], [49.162879, 31.476679]];
   var romaniaCenter = [45.943, 24.966];
 
-  function initMap(darkMode, stations) {
-    if (map) return;
-    isDark = darkMode;
+  // Romania Major Cities for instant visual orientation
+  var romaniaCities = [
+    { name: "București", lat: 44.432, lon: 26.104 },
+    { name: "Cluj-Napoca", lat: 46.771, lon: 23.600 },
+    { name: "Timișoara", lat: 45.754, lon: 21.226 },
+    { name: "Iași", lat: 47.158, lon: 27.601 },
+    { name: "Constanța", lat: 44.179, lon: 28.650 },
+    { name: "Craiova", lat: 44.330, lon: 23.795 },
+    { name: "Brașov", lat: 45.658, lon: 25.601 },
+    { name: "Galați", lat: 45.435, lon: 28.055 },
+    { name: "Oradea", lat: 47.046, lon: 21.919 },
+    { name: "Sibiu", lat: 45.798, lon: 24.126 },
+    { name: "Suceava", lat: 47.651, lon: 26.255 },
+    { name: "Bacău", lat: 46.567, lon: 26.914 },
+    { name: "Pitești", lat: 44.856, lon: 24.869 },
+    { name: "Arad", lat: 46.186, lon: 21.312 },
+    { name: "Baia Mare", lat: 47.660, lon: 23.580 }
+  ];
 
-    map = L.map('map', {
-      zoomControl: false,
-      attributionControl: false,
-      minZoom: 5,
-      maxZoom: 13,
-      inertia: true
-    }).setView(romaniaCenter, 6.5);
+  function getTileUrlForType(type) {
+    switch(type) {
+      case 'anm':
+        return 'https://maps.meteoromania.ro/hottest/{z}/{x}/{y}.png';
+      case 'dark':
+        return 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png';
+      case 'osm':
+        return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+      case 'voyager':
+      default:
+        // CartoDB Voyager: crisp, vibrant terrain & labels
+        return 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+    }
+  }
 
-    var tileUrl = isDark
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+  function setLayerType(type) {
+    currentTileType = type;
+    if (!map) return;
 
-    baseTile = L.tileLayer(tileUrl, {
+    var newUrl = getTileUrlForType(type);
+    if (baseTile) {
+      map.removeLayer(baseTile);
+    }
+
+    baseTile = L.tileLayer(newUrl, {
       maxZoom: 18,
+      minZoom: 5,
       subdomains: 'abcd'
     }).addTo(map);
 
-    baseTile.on('tileerror', function() {
-      if (!window._osmFallback) {
-        window._osmFallback = true;
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+    // Bring radar overlay and markers back to front
+    if (anmRadarOverlay && map.hasLayer(anmRadarOverlay)) {
+      anmRadarOverlay.bringToFront();
+    }
+    if (rainViewerLayer && map.hasLayer(rainViewerLayer)) {
+      rainViewerLayer.bringToFront();
+    }
+
+    var badge = document.getElementById('layer-badge');
+    if (badge) {
+      var name = type === 'anm' ? '🇷🇴 ANM Topografic' :
+                 type === 'dark' ? '🌙 Nocturn Dark' :
+                 type === 'osm' ? '🌐 OpenStreetMap' : '🗺️ CartoDB Voyager';
+      badge.textContent = name + ' • ' + (currentMode === 'anm' ? 'Radar ANM Live' : 'RainViewer');
+    }
+  }
+
+  function initMap(darkMode, stations) {
+    if (map) {
+      if (stations && stations.length > 0) {
+        populateStations(stations);
       }
-    });
+      invalidateSize();
+      return;
+    }
 
-    stationLayerGroup = L.layerGroup().addTo(map);
-    ringsLayerGroup = L.layerGroup().addTo(map);
+    isDark = !!darkMode;
+    currentTileType = isDark ? 'dark' : 'voyager';
 
-    if (stations && stations.length > 0) {
-      stations.forEach(function(st) {
-        var icon = L.divIcon({
-          className: '',
-          html: '<div class="station-marker" id="marker-' + st.code + '" title="' + st.name + '">' + st.code + '</div>',
-          iconSize: [28, 28],
-          iconAnchor: [14, 14]
-        });
-        var marker = L.marker([st.lat, st.lon], { icon: icon }).addTo(stationLayerGroup);
-        marker.on('click', function() {
-          if (window.AndroidRadar && window.AndroidRadar.onStationClick) {
-            window.AndroidRadar.onStationClick(st.code);
-          }
-        });
+    try {
+      map = L.map('map', {
+        zoomControl: false,
+        attributionControl: false,
+        minZoom: 5,
+        maxZoom: 14,
+        inertia: true,
+        fadeAnimation: false,
+        zoomAnimation: true
+      }).setView(romaniaCenter, 6.5);
+
+      // Primary tile layer (CartoDB Voyager or Dark, NO crossOrigin attribute to prevent CORS blocking)
+      baseTile = L.tileLayer(getTileUrlForType(currentTileType), {
+        maxZoom: 18,
+        minZoom: 5,
+        subdomains: 'abcd'
+      }).addTo(map);
+
+      // Fallback handlers if tile server fails
+      baseTile.on('tileerror', function() {
+        if (!window._layerFallbackAttempted) {
+          window._layerFallbackAttempted = true;
+          // Fallback to official ANM topographic tiles
+          setLayerType('anm');
+        } else if (!window._osmFallbackAttempted) {
+          window._osmFallbackAttempted = true;
+          // Fallback to OSM
+          setLayerType('osm');
+        }
       });
-    }
 
-    if (window._pendingRadarUrl) {
-      setRadarOverlay(window._pendingRadarUrl, window._pendingRadarOpacity || 0.85);
-      window._pendingRadarUrl = null;
+      // Layer groups
+      citiesLayerGroup = L.layerGroup().addTo(map);
+      ringsLayerGroup = L.layerGroup().addTo(map);
+      stationLayerGroup = L.layerGroup().addTo(map);
+
+      // Add major Romanian cities labels
+      romaniaCities.forEach(function(city) {
+        var cityIcon = L.divIcon({
+          className: '',
+          html: '<div class="city-label">' + city.name + '</div>',
+          iconSize: [60, 16],
+          iconAnchor: [30, 8]
+        });
+        L.marker([city.lat, city.lon], { icon: cityIcon, interactive: false }).addTo(citiesLayerGroup);
+      });
+
+      if (stations && stations.length > 0) {
+        populateStations(stations);
+      }
+
+      // Check for pending overlays
+      if (window._pendingRadarUrl) {
+        setRadarOverlay(window._pendingRadarUrl, window._pendingRadarOpacity || 0.85);
+        window._pendingRadarUrl = null;
+      }
+      if (window._pendingRainViewerPath) {
+        setRainViewerTile(window._pendingRainViewerPath, window._pendingRainViewerOpacity || 0.85);
+        window._pendingRainViewerPath = null;
+      }
+
+      // Watch container resize
+      var mapContainer = document.getElementById('map');
+      if (window.ResizeObserver && mapContainer) {
+        new ResizeObserver(function() {
+          invalidateSize();
+        }).observe(mapContainer);
+      }
+
+      // Invalidate size in multiple intervals to ensure crisp layout
+      setTimeout(invalidateSize, 80);
+      setTimeout(invalidateSize, 250);
+      setTimeout(invalidateSize, 600);
+      setTimeout(invalidateSize, 1200);
+
+    } catch (e) {
+      console.error('Error initializing Leaflet map:', e);
     }
-    if (window._pendingRainViewerPath) {
-      setRainViewerTile(window._pendingRainViewerPath, window._pendingRainViewerOpacity || 0.85);
-      window._pendingRainViewerPath = null;
-    }
+  }
+
+  function populateStations(stations) {
+    if (!map || !stationLayerGroup) return;
+    stationLayerGroup.clearLayers();
+
+    stations.forEach(function(st) {
+      var icon = L.divIcon({
+        className: '',
+        html: '<div class="station-marker" id="marker-' + st.code + '" title="' + st.name + '">' + st.code + '</div>',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15]
+      });
+      var marker = L.marker([st.lat, st.lon], { icon: icon }).addTo(stationLayerGroup);
+      marker.on('click', function() {
+        if (window.AndroidRadar && window.AndroidRadar.onStationClick) {
+          window.AndroidRadar.onStationClick(st.code);
+        }
+      });
+    });
   }
 
   function setMode(mode) {
     currentMode = mode;
     if (!map) return;
+
     if (mode === 'rainviewer') {
       if (anmRadarOverlay && map.hasLayer(anmRadarOverlay)) {
         map.removeLayer(anmRadarOverlay);
@@ -149,6 +312,12 @@
         ringsLayerGroup.addTo(map);
       }
     }
+
+    var badge = document.getElementById('layer-badge');
+    if (badge) {
+      badge.textContent = (currentTileType === 'anm' ? '🇷🇴 ANM Topografic' : '🗺️ Harta') +
+                          ' • ' + (mode === 'rainviewer' ? 'RainViewer Global' : 'Radar ANM Live');
+    }
   }
 
   function setRadarOverlay(url, opacity) {
@@ -158,6 +327,7 @@
       window._pendingRadarOpacity = opacity;
       return;
     }
+
     try {
       if (anmRadarOverlay) {
         anmRadarOverlay.setUrl(url);
@@ -168,13 +338,17 @@
       } else {
         anmRadarOverlay = L.imageOverlay(url, romaniaBounds, {
           opacity: opacity,
-          zIndex: 10,
+          zIndex: 15,
           interactive: false
         });
         if (currentMode === 'anm') {
           anmRadarOverlay.addTo(map);
         }
       }
+      if (anmRadarOverlay) {
+        anmRadarOverlay.bringToFront();
+      }
+      invalidateSize();
     } catch(e) {
       console.error('Error setting radar overlay:', e);
     }
@@ -187,6 +361,7 @@
       window._pendingRainViewerOpacity = opacity;
       return;
     }
+
     var tileUrl = pathOrUrl.indexOf('http') === 0
       ? pathOrUrl + '/256/{z}/{x}/{y}/2/1_1.png'
       : 'https://tilecache.rainviewer.com' + pathOrUrl + '/256/{z}/{x}/{y}/2/1_1.png';
@@ -200,11 +375,14 @@
     } else {
       rainViewerLayer = L.tileLayer(tileUrl, {
         opacity: opacity,
-        zIndex: 10
+        zIndex: 15
       });
       if (currentMode === 'rainviewer') {
         rainViewerLayer.addTo(map);
       }
+    }
+    if (rainViewerLayer) {
+      rainViewerLayer.bringToFront();
     }
   }
 
@@ -221,7 +399,7 @@
       activeMarker.classList.add('active');
     }
 
-    map.flyTo([lat, lon], 8.5, { duration: 0.8 });
+    map.flyTo([lat, lon], 8.2, { duration: 0.8 });
 
     var ringDistances = [50, 100, 150, 200];
     if (radiusKm && radiusKm > 200) {
@@ -232,20 +410,20 @@
       L.circle([lat, lon], {
         radius: distKm * 1000,
         color: '#0284c7',
-        weight: distKm === radiusKm ? 2 : 1,
+        weight: distKm === radiusKm ? 2.5 : 1,
         dashArray: distKm === radiusKm ? '4, 4' : '2, 6',
         fill: false,
-        opacity: 0.7,
+        opacity: 0.75,
         className: 'radar-ring'
       }).addTo(ringsLayerGroup);
     });
 
     L.circleMarker([lat, lon], {
-      radius: 6,
+      radius: 7,
       color: '#f97316',
       fillColor: '#ea580c',
       fillOpacity: 1,
-      weight: 2
+      weight: 2.5
     }).addTo(ringsLayerGroup);
   }
 
@@ -258,12 +436,28 @@
     map.flyTo(romaniaCenter, 6.5, { duration: 0.8 });
   }
 
+  function invalidateSize() {
+    if (map && map.invalidateSize) {
+      map.invalidateSize();
+    }
+  }
+
+  // Auto-initialize with default settings so map is NEVER black even before Kotlin callback
+  document.addEventListener('DOMContentLoaded', function() {
+    if (!map) {
+      initMap(false, null);
+    }
+  });
+
+  // Export globally for Android WebView
   window.initMap = initMap;
   window.setMode = setMode;
+  window.setLayerType = setLayerType;
   window.setRadarOverlay = setRadarOverlay;
   window.setRainViewerTile = setRainViewerTile;
   window.focusStation = focusStation;
   window.focusNational = focusNational;
+  window.invalidateSize = invalidateSize;
 </script>
 </body>
 </html>

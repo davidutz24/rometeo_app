@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.AppLanguage
@@ -90,44 +91,17 @@ fun DailyForecastList(
     val weekRange = (weekMax - weekMin).coerceAtLeast(1.0)
 
     val titleText = when {
-        isLongTerm -> when (model) {
-            WeatherModel.ECMWF_AIFS -> when (lang) {
-                AppLanguage.ROMANIAN -> "Prognoză AI Sinoptic AIFS (${displayList.size} Zile)"
-                AppLanguage.ENGLISH -> "AIFS AI Synoptic Forecast (${displayList.size} Days)"
-                AppLanguage.HUNGARIAN -> "AIFS AI szinoptikus előrejelzés (${displayList.size} nap)"
-            }
-            WeatherModel.ECMWF_EXTENDED -> when (lang) {
-                AppLanguage.ROMANIAN -> "Tendință Sub-Sezonieră ECMWF ENS (${displayList.size} Zile)"
-                AppLanguage.ENGLISH -> "ECMWF ENS Sub-Seasonal Trend (${displayList.size} Days)"
-                AppLanguage.HUNGARIAN -> "ECMWF ENS szub-szezonális trend (${displayList.size} nap)"
-            }
-            WeatherModel.GEFS -> when (lang) {
-                AppLanguage.ROMANIAN -> "Ansamblu Global GEFS (${displayList.size} Zile)"
-                AppLanguage.ENGLISH -> "GEFS Global Ensemble (${displayList.size} Days)"
-                AppLanguage.HUNGARIAN -> "GEFS globális együttes (${displayList.size} nap)"
-            }
-            WeatherModel.SEAS5 -> when (lang) {
-                AppLanguage.ROMANIAN -> "Tendință Sezonieră ECMWF SEAS5 (${displayList.size} Zile)"
-                AppLanguage.ENGLISH -> "ECMWF SEAS5 Seasonal Trend (${displayList.size} Days)"
-                AppLanguage.HUNGARIAN -> "ECMWF SEAS5 szezonális trend (${displayList.size} nap)"
-            }
-            WeatherModel.CFSV2 -> when (lang) {
-                AppLanguage.ROMANIAN -> "Prognoză Climatică NOAA CFSv2 (${displayList.size} Zile)"
-                AppLanguage.ENGLISH -> "NOAA CFSv2 Climate Forecast (${displayList.size} Days)"
-                AppLanguage.HUNGARIAN -> "NOAA CFSv2 éghajlati előrejelzés (${displayList.size} nap)"
-            }
-            else -> when (lang) {
-                AppLanguage.ROMANIAN -> "${model.shortName} (${displayList.size} Zile)"
-                AppLanguage.ENGLISH -> "${model.shortName} (${displayList.size} Days)"
-                AppLanguage.HUNGARIAN -> "${model.shortName} (${displayList.size} nap)"
-            }
+        isLongTerm -> when (lang) {
+            AppLanguage.ROMANIAN -> "${model.shortName} (${displayList.size} Zile)"
+            AppLanguage.ENGLISH -> "${model.shortName} (${displayList.size} Days)"
+            AppLanguage.HUNGARIAN -> "${model.shortName} (${displayList.size} nap)"
         }
         else -> {
             val daysCount = displayList.size
             when (lang) {
-                AppLanguage.ROMANIAN -> "Prognoză $daysCount zile (${model.shortName})"
-                AppLanguage.ENGLISH -> "$daysCount-Day Forecast (${model.shortName})"
-                AppLanguage.HUNGARIAN -> "$daysCount napos előrejelzés (${model.shortName})"
+                AppLanguage.ROMANIAN -> "Prognoză $daysCount zile"
+                AppLanguage.ENGLISH -> "$daysCount-Day Forecast"
+                AppLanguage.HUNGARIAN -> "$daysCount napos előrejelzés"
             }
         }
     }
@@ -148,43 +122,41 @@ fun DailyForecastList(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
+                modifier = Modifier.weight(1f, fill = false),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (isLongTerm) {
-                    Icon(
-                        imageVector = Icons.Rounded.CalendarMonth,
-                        contentDescription = null,
-                        tint = model.accentColor,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Rounded.CalendarMonth,
+                    contentDescription = null,
+                    tint = model.accentColor,
+                    modifier = Modifier.size(20.dp)
+                )
                 Text(
                     text = titleText,
-                    style = MaterialTheme.typography.titleLarge.copy(
+                    style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
-                    )
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
             Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = model.accentColor.copy(alpha = 0.2f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, model.accentColor.copy(alpha = 0.4f))
+                shape = RoundedCornerShape(8.dp),
+                color = model.accentColor.copy(alpha = 0.18f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, model.accentColor.copy(alpha = 0.35f))
             ) {
-                val daysUnit = when (lang) {
-                    AppLanguage.ROMANIAN -> "zile"
-                    AppLanguage.ENGLISH -> "Days"
-                    AppLanguage.HUNGARIAN -> "nap"
-                }
                 Text(
-                    text = "${displayList.size} $daysUnit (${model.shortName})",
-                    style = MaterialTheme.typography.labelMedium.copy(
+                    text = model.badgeText,
+                    style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     ),
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
         }

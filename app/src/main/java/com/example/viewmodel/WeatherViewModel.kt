@@ -427,12 +427,21 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
         radarJob?.cancel()
         radarJob = viewModelScope.launch {
             _isLoadingRadar.value = true
-            val frames = AnmRemoteDataSource.getNationalRadarFrames()
-            _nationalRadarFrames.value = frames
-            if (frames.isNotEmpty()) {
-                _currentRadarFrameIndex.value = frames.size - 1
+            try {
+                var frames = AnmRemoteDataSource.getNationalRadarFrames()
+                if (frames.isEmpty()) {
+                    kotlinx.coroutines.delay(1200)
+                    frames = AnmRemoteDataSource.getNationalRadarFrames()
+                }
+                _nationalRadarFrames.value = frames
+                if (frames.isNotEmpty()) {
+                    _currentRadarFrameIndex.value = frames.size - 1
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _isLoadingRadar.value = false
             }
-            _isLoadingRadar.value = false
         }
     }
 

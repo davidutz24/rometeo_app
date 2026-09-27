@@ -218,7 +218,7 @@ fun RadarSatelliteScreen(
 
         // --- Active Sub-Tab Content ---
         when (subTab) {
-            RadarSatelliteSubTab.NATIONAL_RADAR, RadarSatelliteSubTab.RADAR_STATIONS -> {
+            RadarSatelliteSubTab.NATIONAL_RADAR -> {
                 item {
                     InteractiveRadarCompositeView(
                         frames = nationalFrames,
@@ -230,6 +230,7 @@ fun RadarSatelliteScreen(
                         selectedStation = selectedStation,
                         allStations = viewModel.radarStations,
                         isDarkTheme = isDarkTheme,
+                        showAllStationsList = false,
                         onIndexChange = { viewModel.setRadarFrameIndex(it) },
                         onTogglePlay = { viewModel.toggleRadarPlayback() },
                         onStep = { viewModel.stepRadarFrame(it) },
@@ -237,6 +238,40 @@ fun RadarSatelliteScreen(
                         onSpeedChange = { viewModel.setRadarPlaybackSpeed(it) },
                         onSelectStation = { viewModel.selectRadarStation(it) },
                         onToggleFullscreen = { isMapFullscreen = true },
+                        onRefresh = { viewModel.loadNationalRadar() },
+                        onOpenWeb = {
+                            val intent = Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://www.meteoromania.ro/radarm/radar.index.php")
+                            )
+                            context.startActivity(intent)
+                        },
+                        lang = lang
+                    )
+                }
+            }
+
+            RadarSatelliteSubTab.RADAR_STATIONS -> {
+                item {
+                    InteractiveRadarCompositeView(
+                        frames = nationalFrames,
+                        currentIndex = currentFrameIndex,
+                        isPlaying = isPlaying,
+                        opacity = radarOpacity,
+                        playbackSpeedMs = playbackSpeedMs,
+                        isLoading = isLoadingRadar,
+                        selectedStation = selectedStation,
+                        allStations = viewModel.radarStations,
+                        isDarkTheme = isDarkTheme,
+                        showAllStationsList = true,
+                        onIndexChange = { viewModel.setRadarFrameIndex(it) },
+                        onTogglePlay = { viewModel.toggleRadarPlayback() },
+                        onStep = { viewModel.stepRadarFrame(it) },
+                        onOpacityChange = { viewModel.setRadarOpacity(it) },
+                        onSpeedChange = { viewModel.setRadarPlaybackSpeed(it) },
+                        onSelectStation = { viewModel.selectRadarStation(it) },
+                        onToggleFullscreen = { isMapFullscreen = true },
+                        onRefresh = { viewModel.loadNationalRadar() },
                         onOpenWeb = {
                             val intent = Intent(
                                 Intent.ACTION_VIEW,
@@ -336,10 +371,8 @@ fun RadarSatelliteScreen(
                     )
                 } else {
                     val currentNatFrame = nationalFrames.getOrNull(currentFrameIndex)
-                    RadarMapView(
-                        mode = RadarMapMode.ANM_RADAR,
+                    NativeRadarMapView(
                         currentRadarImageUrl = currentNatFrame?.imageUrl,
-                        rainViewerTilePath = null,
                         opacity = radarOpacity,
                         selectedStation = selectedStation,
                         allStations = viewModel.radarStations,
@@ -553,6 +586,7 @@ private fun InteractiveRadarCompositeView(
     selectedStation: RadarStationInfo,
     allStations: List<RadarStationInfo>,
     isDarkTheme: Boolean,
+    showAllStationsList: Boolean = false,
     onIndexChange: (Int) -> Unit,
     onTogglePlay: () -> Unit,
     onStep: (Boolean) -> Unit,
@@ -560,11 +594,13 @@ private fun InteractiveRadarCompositeView(
     onSpeedChange: (Long) -> Unit,
     onSelectStation: (RadarStationInfo) -> Unit,
     onToggleFullscreen: () -> Unit,
+    onRefresh: () -> Unit = {},
     onOpenWeb: () -> Unit,
     lang: AppLanguage,
     modifier: Modifier = Modifier
 ) {
     val currentFrame = frames.getOrNull(currentIndex)
+    var viewMode by remember { mutableStateOf(0) }
 
     Column(
         modifier = modifier
@@ -572,6 +608,83 @@ private fun InteractiveRadarCompositeView(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Mode Switcher (Native HD Radar vs Street Map vs Topo Map)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            FilterChip(
+                selected = viewMode == 0,
+                onClick = { viewMode = 0 },
+                label = { Text("📱 Radar Nativ", fontWeight = if (viewMode == 0) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = Color(0xFF0284C7),
+                    selectedLabelColor = Color.White
+                ),
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = viewMode == 1,
+                onClick = { viewMode = 1 },
+                label = { Text("🗺️ Stradal", fontWeight = if (viewMode == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = Color(0xFF0284C7),
+                    selectedLabelColor = Color.White
+                ),
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = viewMode == 2,
+                onClick = { viewMode = 2 },
+                label = { Text("🇷🇴 Topo ANM", fontWeight = if (viewMode == 2) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = Color(0xFF0284C7),
+                    selectedLabelColor = Color.White
+                ),
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Error / Retry Banner if radar frames failed to load
+        if (frames.isEmpty() && !isLoading) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Radar,
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Radarul ANM nu a putut fi descărcat",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Verifică conexiunea la internet sau apasă butonul de mai jos pentru a reîncărca fluxul de imagini radar.",
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center
+                    )
+                    Button(
+                        onClick = onRefresh,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+                    ) {
+                        Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Reîncarcă Radarul")
+                    }
+                }
+            }
+        }
+
         // Station Selector Chips Row
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
@@ -619,7 +732,7 @@ private fun InteractiveRadarCompositeView(
             }
         }
 
-        // Main Radar Screen Card (Interactive Leaflet Map with Real Base Tiles)
+        // Main Radar Screen Card (Native Compose Radar Canvas or Leaflet Map)
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -633,19 +746,34 @@ private fun InteractiveRadarCompositeView(
                         .height(390.dp)
                         .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                 ) {
-                    // Leaflet Radar Map View
-                    RadarMapView(
-                        mode = RadarMapMode.ANM_RADAR,
-                        currentRadarImageUrl = currentFrame?.imageUrl,
-                        rainViewerTilePath = null,
-                        opacity = opacity,
-                        selectedStation = selectedStation,
-                        allStations = allStations,
-                        isDarkTheme = isDarkTheme,
-                        onSelectStation = onSelectStation,
-                        height = 390.dp,
-                        onToggleFullscreen = onToggleFullscreen
-                    )
+                    if (viewMode == 0) {
+                        // 100% Native Jetpack Compose Radar Canvas (Zero Webview dependencies, instant & reliable)
+                        NativeRadarMapView(
+                            currentRadarImageUrl = currentFrame?.imageUrl,
+                            opacity = opacity,
+                            selectedStation = selectedStation,
+                            allStations = allStations,
+                            isDarkTheme = isDarkTheme,
+                            onSelectStation = onSelectStation,
+                            height = 390.dp,
+                            onToggleFullscreen = onToggleFullscreen
+                        )
+                    } else {
+                        // Web Leaflet Radar Map View (supports both CartoDB Voyager and ANM Topo)
+                        RadarMapView(
+                            mode = RadarMapMode.ANM_RADAR,
+                            currentRadarImageUrl = currentFrame?.imageUrl,
+                            rainViewerTilePath = null,
+                            opacity = opacity,
+                            selectedStation = selectedStation,
+                            allStations = allStations,
+                            isDarkTheme = isDarkTheme,
+                            onSelectStation = onSelectStation,
+                            height = 390.dp,
+                            forcedTileType = if (viewMode == 2) "anm" else "voyager",
+                            onToggleFullscreen = onToggleFullscreen
+                        )
+                    }
 
                     // Top Floating Frame Timestamp & Station Badge
                     Surface(
@@ -679,6 +807,27 @@ private fun InteractiveRadarCompositeView(
                                     fontSize = 11.sp
                                 )
                             }
+                        }
+                    }
+
+                    // Quick Refresh Button (Top-Right next to controls)
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color.Black.copy(alpha = 0.76f),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 12.dp, end = 56.dp)
+                    ) {
+                        IconButton(
+                            onClick = onRefresh,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Refresh,
+                                contentDescription = "Reîncarcă Radar",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
 
@@ -837,6 +986,39 @@ private fun InteractiveRadarCompositeView(
             }
         }
 
+        // Live Radar Status & Information Card
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(if (frames.isNotEmpty()) Color(0xFF10B981) else Color(0xFFEAB308))
+                    )
+                    Text(
+                        text = if (frames.isNotEmpty()) "Radar ANM Operațional • 40 cadre Doppler (10 min)" else "Conectare la radar ANM…",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+                Text(
+                    text = "Harta radar afișează relieful României și marile orașe. Ecourile colorate (verde, galben, roșu) apar automat când radarul detectează precipitații (ploaie, ninsoare, grindină). În perioadele cu cer senin sau fără precipitații active, harta rămâne curată.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
         // Selected Station Technical Profile Card (When Individual Station is Active)
         if (selectedStation.code != "COMPOSITE") {
             Card(
@@ -914,6 +1096,77 @@ private fun InteractiveRadarCompositeView(
                             lineHeight = 18.sp
                         )
                     )
+                }
+            }
+        }
+
+        // All 7 Doppler Radar Stations Directory (When in Stations sub-tab)
+        if (showAllStationsList) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "📡 Rețeaua Națională de Radare Doppler WSR-98D & EEC Defender",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                )
+
+                allStations.filter { it.code != "COMPOSITE" }.forEach { station ->
+                    val isCur = station.code == selectedStation.code
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isCur) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectStation(station) }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "${station.name} (${station.code})",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color(0xFF0284C7).copy(alpha = 0.2f)
+                                    ) {
+                                        Text(
+                                            text = station.band,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF0284C7),
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "${station.county} • ${station.locationName} • Rază ${station.coverageRadiusKm} km",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Button(
+                                onClick = { onSelectStation(station) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isCur) Color(0xFF0284C7) else MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = if (isCur) Color.White else MaterialTheme.colorScheme.onSecondaryContainer
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(if (isCur) "Activă" else "Centrează", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
                 }
             }
         }

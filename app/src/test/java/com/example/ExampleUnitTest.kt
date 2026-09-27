@@ -30,10 +30,10 @@ class ExampleUnitTest {
       com.example.model.WeatherModel.ECMWF_AIFS,
       com.example.model.WeatherModel.ECMWF_EXTENDED,
       com.example.model.WeatherModel.GEFS,
-      com.example.model.WeatherModel.SEAS5,
-      com.example.model.WeatherModel.CFSV2
+      com.example.model.WeatherModel.SEAS5
     )
     assertEquals(expectedLongTerm, longTermModels)
+    assertFalse(longTermModels.contains(com.example.model.WeatherModel.CFSV2))
     assertFalse(longTermModels.contains(com.example.model.WeatherModel.GFS))
   }
 }

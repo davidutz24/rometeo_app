@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.FullscreenExit
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.ZoomIn
 import androidx.compose.material.icons.rounded.ZoomOut
@@ -80,6 +81,7 @@ fun RadarMapView(
     modifier: Modifier = Modifier,
     height: Dp = 380.dp,
     isFullscreen: Boolean = false,
+    forcedTileType: String? = null,
     onToggleFullscreen: (() -> Unit)? = null
 ) {
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
@@ -99,6 +101,21 @@ fun RadarMapView(
         filtered.joinToString(prefix = "[", postfix = "]") { s ->
             """{"code":"${s.code}","name":"${s.name}","lat":${s.latitude},"lon":${s.longitude},"radius":${s.coverageRadiusKm}}"""
         }
+    }
+
+    var currentTileType by remember { mutableStateOf(forcedTileType ?: if (isDarkTheme) "dark" else "voyager") }
+
+    // Sync with forcedTileType if provided by parent
+    LaunchedEffect(forcedTileType) {
+        if (forcedTileType != null && forcedTileType != currentTileType) {
+            currentTileType = forcedTileType
+        }
+    }
+
+    // Effect to update base map layer
+    LaunchedEffect(currentTileType, isMapLoaded) {
+        if (!isMapLoaded) return@LaunchedEffect
+        webViewRef?.evaluateJavascript("if (window.setLayerType) { window.setLayerType('$currentTileType'); }", null)
     }
 
     // Effect to update ANM Radar Overlay when frame or opacity changes
@@ -162,18 +179,26 @@ fun RadarMapView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 WebView(ctx).apply {
+                    // Use software layer to prevent Mesa DRI rendernode crashes in emulator environments
+                    setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
+
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
-                        loadWithOverviewMode = true
-                        useWideViewPort = true
+                        loadWithOverviewMode = false
+                        useWideViewPort = false
                         setSupportZoom(true)
                         builtInZoomControls = false
                         displayZoomControls = false
                         cacheMode = WebSettings.LOAD_DEFAULT
                         allowFileAccess = true
                         allowContentAccess = true
+                        @Suppress("DEPRECATION")
+                        allowFileAccessFromFileURLs = true
+                        @Suppress("DEPRECATION")
+                        allowUniversalAccessFromFileURLs = true
                         mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                        userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
                     }
 
                     webChromeClient = object : WebChromeClient() {
@@ -199,6 +224,11 @@ fun RadarMapView(
                     }
 
                     webViewClient = object : WebViewClient() {
+                        override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
+                            super.onReceivedError(view, errorCode, description, failingUrl)
+                            Log.e("RadarLeaflet", "WebView error: $errorCode - $description for $failingUrl")
+                        }
+
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             isMapLoaded = true
@@ -212,7 +242,9 @@ fun RadarMapView(
 
                             if (mode == RadarMapMode.ANM_RADAR) {
                                 currentRadarImageUrl?.let { imgUrl ->
-                                    view?.evaluateJavascript("if (window.setRadarOverlay) { window.setRadarOverlay('$imgUrl', $opacity); }", null)
+                                    if (imgUrl.isNotEmpty()) {
+                                        view?.evaluateJavascript("if (window.setRadarOverlay) { window.setRadarOverlay('$imgUrl', $opacity); }", null)
+                                    }
                                 }
                                 val station = selectedStation
                                 if (station != null && station.code != "COMPOSITE") {
@@ -222,18 +254,59 @@ fun RadarMapView(
                                 }
                             } else {
                                 rainViewerTilePath?.let { path ->
-                                    view?.evaluateJavascript("if (window.setRainViewerTile) { window.setRainViewerTile('$path', $opacity); }", null)
+                                    if (path.isNotEmpty()) {
+                                        view?.evaluateJavascript("if (window.setRainViewerTile) { window.setRainViewerTile('$path', $opacity); }", null)
+                                    }
                                 }
                             }
+
+                            // Trigger map size recalculation after layout
+                            view?.evaluateJavascript("if (window.invalidateSize) { window.invalidateSize(); }", null)
                         }
                     }
 
-                    loadUrl("file:///android_asset/radar_map.html")
+                    try {
+                        val html = ctx.assets.open("radar_map.html").bufferedReader().use { it.readText() }
+                        val css = try { ctx.assets.open("leaflet.css").bufferedReader().use { it.readText() } } catch (_: Exception) { "" }
+                        val js = try { ctx.assets.open("leaflet.js").bufferedReader().use { it.readText() } } catch (_: Exception) { "" }
+                        val bundledHtml = html
+                            .replace("""<link rel="stylesheet" href="leaflet.css" />""", "<style>$css</style>")
+                            .replace("""<script src="leaflet.js"></script>""", "<script>$js</script>")
+                        loadDataWithBaseURL("https://www.meteoromania.ro/radarm/", bundledHtml, "text/html", "UTF-8", null)
+                    } catch (e: Exception) {
+                        Log.e("RadarLeaflet", "Failed loading bundled radar map HTML", e)
+                        loadUrl("file:///android_asset/radar_map.html")
+                    }
                     webViewRef = this
                 }
             },
             update = { wv ->
                 webViewRef = wv
+                if (isMapLoaded) {
+                    val modeStr = if (mode == RadarMapMode.RAINVIEWER_RADAR) "rainviewer" else "anm"
+                    wv.evaluateJavascript("if (window.setMode) { window.setMode('$modeStr'); }", null)
+
+                    if (mode == RadarMapMode.ANM_RADAR) {
+                        currentRadarImageUrl?.let { imgUrl ->
+                            if (imgUrl.isNotEmpty()) {
+                                wv.evaluateJavascript("if (window.setRadarOverlay) { window.setRadarOverlay('$imgUrl', $opacity); }", null)
+                            }
+                        }
+                        val station = selectedStation
+                        if (station != null && station.code != "COMPOSITE") {
+                            wv.evaluateJavascript("if (window.focusStation) { window.focusStation('${station.code}', ${station.latitude}, ${station.longitude}, ${station.coverageRadiusKm}); }", null)
+                        } else {
+                            wv.evaluateJavascript("if (window.focusNational) { window.focusNational(); }", null)
+                        }
+                    } else {
+                        rainViewerTilePath?.let { path ->
+                            if (path.isNotEmpty()) {
+                                wv.evaluateJavascript("if (window.setRainViewerTile) { window.setRainViewerTile('$path', $opacity); }", null)
+                            }
+                        }
+                    }
+                    wv.evaluateJavascript("if (window.invalidateSize) { window.invalidateSize(); }", null)
+                }
             }
         )
 
@@ -298,6 +371,31 @@ fun RadarMapView(
                         contentDescription = "Recentrare",
                         tint = Color(0xFF0284C7),
                         modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Cycle map layers (Voyager -> ANM Topo -> Dark -> OSM)
+                IconButton(
+                    onClick = {
+                        currentTileType = when (currentTileType) {
+                            "voyager" -> "anm"
+                            "anm" -> "dark"
+                            "dark" -> "osm"
+                            else -> "voyager"
+                        }
+                    },
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.Layers,
+                        contentDescription = "Schimbă stilul hărții",
+                        tint = when (currentTileType) {
+                            "anm" -> Color(0xFF10B981) // Green for ANM
+                            "dark" -> Color(0xFF8B5CF6) // Purple for Dark
+                            "osm" -> Color(0xFFF59E0B) // Amber for OSM
+                            else -> Color(0xFF0284C7) // Blue for Voyager
+                        },
+                        modifier = Modifier.size(19.dp)
                     )
                 }
 

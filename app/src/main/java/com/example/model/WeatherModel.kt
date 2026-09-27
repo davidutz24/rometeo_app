@@ -55,13 +55,13 @@ enum class WeatherModel(
     ICON_EU_FLASH(
         id = "icon_eu_flash",
         apiKey = "icon_eu",
-        displayName = "ICON-EU Flash (30 ore)",
-        shortName = "ICON Flash (30h)",
+        displayName = "ICON Flash",
+        shortName = "ICON Flash",
         badgeText = "6.5 km",
         subtitleTagline = "Actualizare rapidă (la 3 ore) • 6.5 km",
-        agency = "DWD (Germania Rapid)",
+        agency = "DWD (Germania)",
         resolution = "6.5 km / Rapid Update",
-        architectureType = "Rapid Update Cycle (la fiecare 3 ore)",
+        architectureType = "Rapid Update Cycle (30h)",
         updateCycle = "La fiecare 3h (0 – 30 ore)",
         accentColor = Color(0xFFEF4444),
         isRapidUpdate = true,
@@ -70,13 +70,13 @@ enum class WeatherModel(
     WEATHERNEXT_3(
         id = "weathernext_3",
         apiKey = "google_weathernext2_ensemble",
-        displayName = "Google WeatherNext 3 (Global AI)",
+        displayName = "WeatherNext 3",
         shortName = "WeatherNext 3",
         badgeText = "5/10 km",
-        subtitleTagline = "AI Satelitar (Actualizat orar) • 5 km / 10 km",
+        subtitleTagline = "AI Satelitar (Actualizat orar) • 5/10 km",
         agency = "Google DeepMind",
         resolution = "5 km (Temp/Umiditate) • 10 km (Vânt/Precip)",
-        architectureType = "Global AI Deep Ensemble (64 membri) & Satelit Geostaționar",
+        architectureType = "Global AI Deep Ensemble (64 membri)",
         updateCycle = "Actualizat orar (0 – 48h) / Cicluri principale (până la 15 zile)",
         accentColor = Color(0xFF4285F4),
         isAi = true,
@@ -85,8 +85,8 @@ enum class WeatherModel(
     ICON_EU(
         id = "icon_eu",
         apiKey = "icon_eu",
-        displayName = "ICON-EU Standard (5 zile / 120 ore)",
-        shortName = "ICON-EU (5z)",
+        displayName = "ICON-EU",
+        shortName = "ICON-EU",
         badgeText = "6.5 km",
         subtitleTagline = "Regional European • 6.5 km",
         agency = "DWD (Europa)",
@@ -100,8 +100,8 @@ enum class WeatherModel(
     ECMWF_IFS(
         id = "ecmwf_ifs",
         apiKey = "ecmwf_ifs025",
-        displayName = "ECMWF IFS HRES (15 zile / 360 ore)",
-        shortName = "ECMWF IFS HRES",
+        displayName = "ECMWF IFS",
+        shortName = "ECMWF IFS",
         badgeText = "9 km",
         subtitleTagline = "Global de referință • 9 km",
         agency = "ECMWF (Europa)",
@@ -114,19 +114,18 @@ enum class WeatherModel(
     ),
 
     // -------------------------------------------------------------------------
-    // Categoria 2: Termen Lung (15 – 46 Zile)
-    // Modele exclusive solicitate:
+    // Categoria 2: Prognoză termen lung (15 – 46 Zile)
+    // Modele exclusive:
     // 1. ECMWF AIFS (15 zile)
     // 2. ECMWF ENS (15 – 46 zile)
     // 3. GEFS Ensemble (16 – 35 zile)
     // 4. ECMWF SEAS5 (46 zile)
-    // 5. NOAA CFSv2 (46 zile separat)
     // -------------------------------------------------------------------------
     ECMWF_AIFS(
         id = "ecmwf_aifs",
         apiKey = "ecmwf_aifs025_single",
-        displayName = "ECMWF AIFS (15 zile)",
-        shortName = "AIFS AI (15z)",
+        displayName = "ECMWF AIFS",
+        shortName = "ECMWF AIFS",
         badgeText = "25 km",
         subtitleTagline = "AI Sinoptic Global • 25 km",
         agency = "ECMWF (European AI Centre)",
@@ -141,8 +140,8 @@ enum class WeatherModel(
     ECMWF_EXTENDED(
         id = "ecmwf_extended",
         apiKey = "ecmwf_ec46",
-        displayName = "ECMWF ENS (15 – 46 zile)",
-        shortName = "ECMWF ENS (46z)",
+        displayName = "ECMWF ENS",
+        shortName = "ECMWF ENS",
         badgeText = "46z",
         subtitleTagline = "Ansamblu Sub-Sezonier (51 membri) • 36 km",
         agency = "ECMWF (Sub-Seasonal)",
@@ -156,8 +155,8 @@ enum class WeatherModel(
     GEFS(
         id = "gefs",
         apiKey = "gfs_seamless",
-        displayName = "GEFS Ensemble (16 – 35 zile)",
-        shortName = "GEFS ENS (35z)",
+        displayName = "GEFS ENS",
+        shortName = "GEFS ENS",
         badgeText = "35z",
         subtitleTagline = "Ansamblu Global NOAA (31 membri) • 35z",
         agency = "NOAA / NCEP (SUA)",
@@ -171,8 +170,8 @@ enum class WeatherModel(
     SEAS5(
         id = "seas5",
         apiKey = "ecmwf_seas5",
-        displayName = "ECMWF SEAS5 Climatologie (46 zile)",
-        shortName = "SEAS5 (46z)",
+        displayName = "ECMWF SEAS5",
+        shortName = "ECMWF SEAS5",
         badgeText = "46z",
         subtitleTagline = "Tendință Sezonieră ECMWF • 46z",
         agency = "ECMWF (Europa)",
@@ -186,8 +185,8 @@ enum class WeatherModel(
     CFSV2(
         id = "cfsv2",
         apiKey = "cfs_seamless",
-        displayName = "NOAA CFSv2 Climatologie (46 zile)",
-        shortName = "CFSv2 (46z)",
+        displayName = "CFSv2",
+        shortName = "CFSv2",
         badgeText = "46z",
         subtitleTagline = "Tendință Climatică NOAA NCEP • 46z",
         agency = "NOAA / NCEP (SUA)",
@@ -196,15 +195,15 @@ enum class WeatherModel(
         updateCycle = "Rulări zilnice pe 46 de zile",
         accentColor = Color(0xFFF97316),
         isLongRange = true,
-        categories = listOf(ForecastCategory.LONG_TERM)
+        categories = emptyList() // Exclus din Termen Lung conform cererii
     ),
 
     // Modele secundare opționale de referință
     GFS(
         id = "gfs",
         apiKey = "gfs_global",
-        displayName = "GFS 0.25° (16 zile)",
-        shortName = "GFS 0.25° (16z)",
+        displayName = "GFS",
+        shortName = "GFS",
         badgeText = "0.25°",
         subtitleTagline = "Model Global NOAA • 28 km",
         agency = "NOAA (SUA)",
@@ -219,7 +218,7 @@ enum class WeatherModel(
     ARPEGE(
         id = "arpege",
         apiKey = "meteofrance_arpege_europe",
-        displayName = "ARPEGE Europe",
+        displayName = "ARPEGE",
         shortName = "ARPEGE",
         badgeText = "10 km",
         subtitleTagline = "Regional Météo-France • 10 km",
